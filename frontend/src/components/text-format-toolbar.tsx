@@ -111,8 +111,8 @@ export default function TextFormatToolbar({
       const above = r.top - gap - pad
       const menuH = m?.getBoundingClientRect().height ?? FONT_MENU_ESTIMATE_PX
       let openUp: boolean
-      if (below >= menuH) openUp = false
-      else if (above >= menuH) openUp = true
+      if (above >= menuH) openUp = true
+      else if (below >= menuH) openUp = false
       else openUp = above > below
       setFontMenuOpenUpward(openUp)
       const avail = openUp ? above : below
