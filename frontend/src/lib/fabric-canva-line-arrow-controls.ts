@@ -165,6 +165,7 @@ function arrowEndpointAction(which: 'tail' | 'tip'): TransformActionHandler {
       color,
       lineStyle: meta.arrowLineStyle,
       roundedEnds: meta.arrowRoundedEnds,
+      pathType: meta.arrowPathType ?? 'straight',
     })
     setAvnacShapeMeta(g, { ...meta, arrowEndpoints: ep })
     return true
