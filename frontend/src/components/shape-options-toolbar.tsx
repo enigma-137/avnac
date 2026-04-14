@@ -1,11 +1,18 @@
 import { HugeiconsIcon } from '@hugeicons/react'
 import {
   ArrowDown01Icon,
+  BendToolIcon,
   DashedLine01Icon,
   SolidLine01Icon,
+  StraightEdgeIcon,
+  Tick02Icon,
 } from '@hugeicons/core-free-icons'
 import { useEffect, useRef, useState } from 'react'
-import type { ArrowLineStyle, AvnacShapeMeta } from '../lib/avnac-shape-meta'
+import type {
+  ArrowLineStyle,
+  ArrowPathType,
+  AvnacShapeMeta,
+} from '../lib/avnac-shape-meta'
 import {
   FloatingToolbarDivider,
   FloatingToolbarShell,
@@ -22,6 +29,7 @@ type Props = {
   onArrowLineStyle: (style: ArrowLineStyle) => void
   onArrowRoundedEnds: (rounded: boolean) => void
   onArrowStrokeWidth: (w: number) => void
+  onArrowPathType: (pathType: ArrowPathType) => void
 }
 
 function smallLabel(className = '') {
@@ -63,20 +71,23 @@ export default function ShapeOptionsToolbar({
   onArrowLineStyle,
   onArrowRoundedEnds,
   onArrowStrokeWidth,
+  onArrowPathType,
 }: Props) {
   const [strokePanelOpen, setStrokePanelOpen] = useState(false)
+  const [lineTypePanelOpen, setLineTypePanelOpen] = useState(false)
   const arrowRootRef = useRef<HTMLDivElement>(null)
   const arrowColorInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    if (!strokePanelOpen) return
+    if (!strokePanelOpen && !lineTypePanelOpen) return
     const onDoc = (e: MouseEvent) => {
       if (arrowRootRef.current?.contains(e.target as Node)) return
       setStrokePanelOpen(false)
+      setLineTypePanelOpen(false)
     }
     document.addEventListener('mousedown', onDoc)
     return () => document.removeEventListener('mousedown', onDoc)
-  }, [strokePanelOpen])
+  }, [strokePanelOpen, lineTypePanelOpen])
 
   if (meta.kind === 'polygon') {
     const sides = meta.polygonSides ?? 6
@@ -145,6 +156,7 @@ export default function ShapeOptionsToolbar({
     const rounded = meta.arrowRoundedEnds ?? false
     const strokeW = meta.arrowStrokeWidth ?? 10
     const strokeHex = arrowStrokeColor ?? '#262626'
+    const pathType = meta.arrowPathType ?? 'straight'
 
     return (
       <div ref={arrowRootRef} className="relative">
@@ -178,6 +190,37 @@ export default function ShapeOptionsToolbar({
 
             <button
               type="button"
+              className={floatingToolbarIconButton(lineTypePanelOpen, {
+                wide: true,
+              })}
+              aria-expanded={lineTypePanelOpen}
+              aria-haspopup="dialog"
+              aria-label="Line type"
+              title="Line type"
+              onClick={() => {
+                setLineTypePanelOpen((o) => !o)
+                setStrokePanelOpen(false)
+              }}
+            >
+              <HugeiconsIcon
+                icon={
+                  pathType === 'curved' ? BendToolIcon : StraightEdgeIcon
+                }
+                size={18}
+                strokeWidth={1.75}
+              />
+              <HugeiconsIcon
+                icon={ArrowDown01Icon}
+                size={12}
+                strokeWidth={1.75}
+                className={`transition-transform ${lineTypePanelOpen ? 'rotate-180' : ''}`}
+              />
+            </button>
+
+            <FloatingToolbarDivider />
+
+            <button
+              type="button"
               className={floatingToolbarIconButton(strokePanelOpen, {
                 wide: true,
               })}
@@ -185,7 +228,10 @@ export default function ShapeOptionsToolbar({
               aria-haspopup="dialog"
               aria-label="Stroke style"
               title="Stroke style"
-              onClick={() => setStrokePanelOpen((o) => !o)}
+              onClick={() => {
+                setStrokePanelOpen((o) => !o)
+                setLineTypePanelOpen(false)
+              }}
             >
               {lineStyleIcon(lineStyle)}
               <HugeiconsIcon
@@ -197,6 +243,66 @@ export default function ShapeOptionsToolbar({
             </button>
           </div>
         </FloatingToolbarShell>
+
+        {lineTypePanelOpen ? (
+          <div
+            role="dialog"
+            aria-label="Line type"
+            className={[
+              'absolute bottom-full left-1/2 z-[60] mb-2 min-w-[11rem] -translate-x-1/2 px-2 py-2',
+              floatingToolbarPopoverClass,
+            ].join(' ')}
+          >
+            <button
+              type="button"
+              className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-[13px] font-medium text-neutral-800 hover:bg-black/[0.05]"
+              onClick={() => {
+                onArrowPathType('straight')
+                setLineTypePanelOpen(false)
+              }}
+            >
+              <HugeiconsIcon
+                icon={StraightEdgeIcon}
+                size={18}
+                strokeWidth={1.75}
+                className="shrink-0 text-neutral-600"
+              />
+              <span className="flex-1">Straight</span>
+              {pathType === 'straight' ? (
+                <HugeiconsIcon
+                  icon={Tick02Icon}
+                  size={16}
+                  strokeWidth={1.75}
+                  className="shrink-0 text-neutral-700"
+                />
+              ) : null}
+            </button>
+            <button
+              type="button"
+              className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-[13px] font-medium text-neutral-800 hover:bg-black/[0.05]"
+              onClick={() => {
+                onArrowPathType('curved')
+                setLineTypePanelOpen(false)
+              }}
+            >
+              <HugeiconsIcon
+                icon={BendToolIcon}
+                size={18}
+                strokeWidth={1.75}
+                className="shrink-0 text-neutral-600"
+              />
+              <span className="flex-1">Curved</span>
+              {pathType === 'curved' ? (
+                <HugeiconsIcon
+                  icon={Tick02Icon}
+                  size={16}
+                  strokeWidth={1.75}
+                  className="shrink-0 text-neutral-700"
+                />
+              ) : null}
+            </button>
+          </div>
+        ) : null}
 
         {strokePanelOpen ? (
           <div
