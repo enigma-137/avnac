@@ -36,6 +36,7 @@ import {
   getAvnacShapeMeta,
   setAvnacShapeMeta,
   type ArrowLineStyle,
+  type ArrowPathType,
   type AvnacShapeMeta,
 } from '../lib/avnac-shape-meta'
 import {
@@ -775,6 +776,7 @@ export default function FabricEditor() {
       arrowStrokeWidth: strokeW,
       arrowLineStyle: 'solid',
       arrowRoundedEnds: false,
+      arrowPathType: 'straight',
     })
     installCanvaArrowControls(g)
     canvas.add(g)
@@ -856,6 +858,7 @@ export default function FabricEditor() {
       color,
       lineStyle: style,
       roundedEnds: m?.arrowRoundedEnds,
+      pathType: m?.arrowPathType ?? 'straight',
     })
     setAvnacShapeMeta(obj, { ...m, arrowLineStyle: style })
     canvas.requestRenderAll()
@@ -882,6 +885,7 @@ export default function FabricEditor() {
       color,
       lineStyle: m?.arrowLineStyle,
       roundedEnds: rounded,
+      pathType: m?.arrowPathType ?? 'straight',
     })
     setAvnacShapeMeta(obj, { ...m, arrowRoundedEnds: rounded })
     canvas.requestRenderAll()
@@ -908,8 +912,36 @@ export default function FabricEditor() {
       color,
       lineStyle: m?.arrowLineStyle,
       roundedEnds: m?.arrowRoundedEnds,
+      pathType: m?.arrowPathType ?? 'straight',
     })
     setAvnacShapeMeta(obj, { ...m, arrowStrokeWidth: strokeW })
+    canvas.requestRenderAll()
+    syncShapeToolbar()
+  }
+
+  function applyArrowPathType(pathType: ArrowPathType) {
+    const canvas = fabricCanvasRef.current
+    const mod = fabricModRef.current
+    if (!canvas || !mod) return
+    const obj = canvas.getActiveObject()
+    if (!(obj instanceof mod.Group)) return
+    const meta = getAvnacShapeMeta(obj)
+    if (!meta || meta.kind !== 'arrow') return
+    ensureAvnacArrowEndpoints(obj)
+    const m = getAvnacShapeMeta(obj)
+    const ep = m?.arrowEndpoints
+    if (!ep) return
+    const strokeW = m?.arrowStrokeWidth ?? 10
+    const color = arrowDisplayColor(obj)
+    layoutArrowGroup(obj, ep.x1, ep.y1, ep.x2, ep.y2, {
+      strokeWidth: strokeW,
+      headFrac: m?.arrowHead ?? 1,
+      color,
+      lineStyle: m?.arrowLineStyle,
+      roundedEnds: m?.arrowRoundedEnds,
+      pathType,
+    })
+    setAvnacShapeMeta(obj, { ...m, arrowPathType: pathType })
     canvas.requestRenderAll()
     syncShapeToolbar()
   }
@@ -1195,6 +1227,7 @@ export default function FabricEditor() {
             onArrowLineStyle={applyArrowLineStyle}
             onArrowRoundedEnds={applyArrowRoundedEnds}
             onArrowStrokeWidth={applyArrowStrokeWidth}
+            onArrowPathType={applyArrowPathType}
           />
         </div>
       ) : null}
