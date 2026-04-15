@@ -1116,137 +1116,8 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
   }
 
   return (
-    <div className="relative min-h-0 flex-1">
-      <div
-        ref={viewportRef}
-        className="flex h-full min-h-[280px] min-w-0 items-center justify-center overflow-auto rounded-2xl bg-[var(--surface-subtle)] p-4 sm:p-6"
-      >
-        <div className="flex w-full min-w-0 flex-col items-center justify-center gap-3">
-          <div
-            ref={selectionToolsRef}
-            className="pointer-events-auto relative z-30 flex min-h-11 w-full max-w-full shrink-0 justify-center px-1 sm:px-2"
-          >
-            {ready && textToolbarValues ? (
-              <TextFormatToolbar
-                values={textToolbarValues}
-                onChange={onTextFormatChange}
-              />
-            ) : null}
-            {ready && !textToolbarValues && shapeToolbarModel ? (
-              <ShapeOptionsToolbar
-                meta={shapeToolbarModel.meta}
-                paintValue={shapeToolbarModel.paint}
-                onPaintChange={applyPaintToSelection}
-                onPolygonSides={applyPolygonSides}
-                onStarPoints={applyStarPoints}
-                onArrowLineStyle={applyArrowLineStyle}
-                onArrowRoundedEnds={applyArrowRoundedEnds}
-                onArrowStrokeWidth={applyArrowStrokeWidth}
-                onArrowPathType={applyArrowPathType}
-              />
-            ) : null}
-            {ready &&
-            !textToolbarValues &&
-            !shapeToolbarModel &&
-            canvasBodySelected ? (
-              <div ref={backgroundPopoverAnchorRef} className="relative">
-                <div className="flex items-center rounded-full border border-black/[0.08] bg-white/90 px-2 py-1 shadow-[0_4px_20px_rgba(0,0,0,0.08)] backdrop-blur-md">
-                  <button
-                    type="button"
-                    className={backgroundTopBtn(false)}
-                    onClick={() => setBgPopoverOpen((o) => !o)}
-                    aria-label="Page background"
-                    aria-expanded={bgPopoverOpen}
-                    aria-haspopup="dialog"
-                    title="Background"
-                  >
-                    <HugeiconsIcon
-                      icon={BackgroundIcon}
-                      size={20}
-                      strokeWidth={1.75}
-                    />
-                    <span
-                      className="h-5 w-5 shrink-0 rounded-md border border-black/15 shadow-inner"
-                      style={bgValueToSwatch(bgValue)}
-                    />
-                    <span className="pr-0.5">Background</span>
-                  </button>
-                </div>
-                {bgPopoverOpen ? (
-                  <div
-                    ref={backgroundPopoverPanelRef}
-                    className={[
-                      'absolute left-1/2 z-[60]',
-                      backgroundPopoverOpenUpward
-                        ? 'bottom-full mb-2'
-                        : 'top-full mt-2',
-                    ].join(' ')}
-                    style={{
-                      transform: `translateX(calc(-50% + ${backgroundPopoverShiftX}px))`,
-                    }}
-                  >
-                    <BackgroundPopover
-                      value={bgValue}
-                      onChange={(v) => onBackgroundPicked(v)}
-                    />
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
-          </div>
-          <div className="relative z-0 inline-block">
-            <div
-              ref={artboardFrameRef}
-              className="relative rounded-sm shadow-[0_4px_24px_rgba(0,0,0,0.08)]"
-              style={{ lineHeight: 0 }}
-            >
-              <canvas ref={canvasElRef} className="block max-w-none" />
-              {ready &&
-              (artboardSnapGuides.vertical || artboardSnapGuides.horizontal) ? (
-                <div
-                  className="pointer-events-none absolute inset-0 z-[5]"
-                  aria-hidden
-                >
-                  {artboardSnapGuides.vertical ? (
-                    <div
-                      className="absolute bottom-0 left-1/2 top-0 w-px -translate-x-1/2"
-                      style={{ backgroundColor: EDITOR_ACCENT_PURPLE }}
-                    />
-                  ) : null}
-                  {artboardSnapGuides.horizontal ? (
-                    <div
-                      className="absolute left-0 right-0 top-1/2 h-px -translate-y-1/2"
-                      style={{ backgroundColor: EDITOR_ACCENT_PURPLE }}
-                    />
-                  ) : null}
-                </div>
-              ) : null}
-            </div>
-          </div>
-        </div>
-
-        <div
-          ref={canvasZoomRef}
-          className="pointer-events-auto absolute bottom-4 right-5 z-10 flex flex-col items-end gap-1"
-        >
-          {ready && zoomPercent !== null ? (
-            <>
-              <CanvasZoomSlider
-                value={zoomPercent}
-                min={ZOOM_MIN_PCT}
-                max={ZOOM_MAX_PCT}
-                onChange={onZoomSliderChange}
-                onFitRequest={onZoomFitRequest}
-              />
-              <div className="pr-1 text-xs tabular-nums text-[var(--text-muted)]">
-                {ARTBOARD_W}×{ARTBOARD_H}px
-              </div>
-            </>
-          ) : null}
-        </div>
-      </div>
-
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex justify-center pb-5 pt-24">
+    <div className="relative flex min-h-0 flex-1 flex-col">
+      <div className="pointer-events-none flex shrink-0 justify-center py-2">
         <div
           ref={bottomToolbarRef}
           className="pointer-events-auto flex items-center gap-1 rounded-full border border-black/[0.08] bg-white/85 px-2 py-1.5 shadow-[0_8px_30px_rgba(0,0,0,0.08),0_0_0_1px_rgba(255,255,255,0.8)_inset] backdrop-blur-xl"
@@ -1328,6 +1199,136 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
         </div>
       </div>
 
+      <div
+        ref={selectionToolsRef}
+        className="pointer-events-auto relative z-30 flex min-h-11 w-full shrink-0 justify-center px-1 pb-2 sm:px-2"
+      >
+        {ready && textToolbarValues ? (
+          <TextFormatToolbar
+            values={textToolbarValues}
+            onChange={onTextFormatChange}
+          />
+        ) : null}
+        {ready && !textToolbarValues && shapeToolbarModel ? (
+          <ShapeOptionsToolbar
+            meta={shapeToolbarModel.meta}
+            paintValue={shapeToolbarModel.paint}
+            onPaintChange={applyPaintToSelection}
+            onPolygonSides={applyPolygonSides}
+            onStarPoints={applyStarPoints}
+            onArrowLineStyle={applyArrowLineStyle}
+            onArrowRoundedEnds={applyArrowRoundedEnds}
+            onArrowStrokeWidth={applyArrowStrokeWidth}
+            onArrowPathType={applyArrowPathType}
+          />
+        ) : null}
+        {ready &&
+        !textToolbarValues &&
+        !shapeToolbarModel &&
+        canvasBodySelected ? (
+          <div ref={backgroundPopoverAnchorRef} className="relative">
+            <div className="flex items-center rounded-full border border-black/[0.08] bg-white/90 px-2 py-1 shadow-[0_4px_20px_rgba(0,0,0,0.08)] backdrop-blur-md">
+              <button
+                type="button"
+                className={backgroundTopBtn(false)}
+                onClick={() => setBgPopoverOpen((o) => !o)}
+                aria-label="Page background"
+                aria-expanded={bgPopoverOpen}
+                aria-haspopup="dialog"
+                title="Background"
+              >
+                <HugeiconsIcon
+                  icon={BackgroundIcon}
+                  size={20}
+                  strokeWidth={1.75}
+                />
+                <span
+                  className="h-5 w-5 shrink-0 rounded-md border border-black/15 shadow-inner"
+                  style={bgValueToSwatch(bgValue)}
+                />
+                <span className="pr-0.5">Background</span>
+              </button>
+            </div>
+            {bgPopoverOpen ? (
+              <div
+                ref={backgroundPopoverPanelRef}
+                className={[
+                  'absolute left-1/2 z-[60]',
+                  backgroundPopoverOpenUpward
+                    ? 'bottom-full mb-2'
+                    : 'top-full mt-2',
+                ].join(' ')}
+                style={{
+                  transform: `translateX(calc(-50% + ${backgroundPopoverShiftX}px))`,
+                }}
+              >
+                <BackgroundPopover
+                  value={bgValue}
+                  onChange={(v) => onBackgroundPicked(v)}
+                />
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+
+      <div
+        ref={viewportRef}
+        className="relative flex min-h-0 flex-1 flex-col overflow-auto rounded-2xl bg-[var(--surface-subtle)]"
+      >
+        <div className="flex min-h-min w-full flex-1 flex-col items-center justify-center p-4 sm:p-6">
+          <div className="relative z-0 inline-block">
+            <div
+              ref={artboardFrameRef}
+              className="relative rounded-sm shadow-[0_4px_24px_rgba(0,0,0,0.08)]"
+              style={{ lineHeight: 0 }}
+            >
+              <canvas ref={canvasElRef} className="block max-w-none" />
+              {ready &&
+              (artboardSnapGuides.vertical || artboardSnapGuides.horizontal) ? (
+                <div
+                  className="pointer-events-none absolute inset-0 z-[5]"
+                  aria-hidden
+                >
+                  {artboardSnapGuides.vertical ? (
+                    <div
+                      className="absolute bottom-0 left-1/2 top-0 w-px -translate-x-1/2"
+                      style={{ backgroundColor: EDITOR_ACCENT_PURPLE }}
+                    />
+                  ) : null}
+                  {artboardSnapGuides.horizontal ? (
+                    <div
+                      className="absolute left-0 right-0 top-1/2 h-px -translate-y-1/2"
+                      style={{ backgroundColor: EDITOR_ACCENT_PURPLE }}
+                    />
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </div>
+
+        <div
+          ref={canvasZoomRef}
+          className="pointer-events-auto absolute bottom-4 right-5 z-10 flex flex-col items-end gap-1"
+        >
+          {ready && zoomPercent !== null ? (
+            <>
+              <CanvasZoomSlider
+                value={zoomPercent}
+                min={ZOOM_MIN_PCT}
+                max={ZOOM_MAX_PCT}
+                onChange={onZoomSliderChange}
+                onFitRequest={onZoomFitRequest}
+              />
+              <div className="pr-1 text-xs tabular-nums text-[var(--text-muted)]">
+                {ARTBOARD_W}×{ARTBOARD_H}px
+              </div>
+            </>
+          ) : null}
+        </div>
+      </div>
+
       {!ready ? (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
           <span className="text-sm text-[var(--text-muted)]">
@@ -1335,7 +1336,6 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
           </span>
         </div>
       ) : null}
-
     </div>
   )
 },
