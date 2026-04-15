@@ -18,6 +18,7 @@ import {
 } from 'react'
 import { useViewportAwarePopoverPlacement } from '../hooks/use-viewport-aware-popover'
 import { installArtboardCenterSnap } from '../lib/fabric-artboard-center-snap'
+import { removeActiveObjectFromCanvas } from '../lib/fabric-remove-selection'
 import {
   ensureAvnacArrowEndpoints,
   installArrowEndpointControls,
@@ -576,17 +577,16 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
       if (t.closest('input, textarea, [contenteditable="true"]')) return
       const c = fabricCanvasRef.current
       if (!c) return
-      const objs = c.getActiveObjects()
-      if (objs.length === 0) return
+      if (!c.getActiveObject()) return
       e.preventDefault()
-      for (const o of objs) {
-        c.remove(o)
-      }
-      c.discardActiveObject()
+      e.stopPropagation()
+      if (!removeActiveObjectFromCanvas(c)) return
       c.requestRenderAll()
       setHasObjectSelected(false)
       setCanvasBodySelected(true)
       selectionTick()
+      syncTextToolbar()
+      syncShapeToolbar()
     }
 
     void (async () => {
@@ -1392,6 +1392,7 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
     }
     const snapshot = [...objs]
     canvas.discardActiveObject()
+    for (const o of snapshot) canvas.remove(o)
     const group = new mod.Group(snapshot, { canvas })
     canvas.add(group)
     canvas.setActiveObject(group)
@@ -1451,16 +1452,14 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
   function deleteSelection() {
     const canvas = fabricCanvasRef.current
     if (!canvas) return
-    const objs = canvas.getActiveObjects()
-    if (objs.length === 0) return
-    for (const o of objs) {
-      canvas.remove(o)
-    }
-    canvas.discardActiveObject()
+    if (!canvas.getActiveObject()) return
+    if (!removeActiveObjectFromCanvas(canvas)) return
     canvas.requestRenderAll()
     setHasObjectSelected(false)
     setCanvasBodySelected(true)
     selectionTick()
+    syncTextToolbar()
+    syncShapeToolbar()
   }
 
   const exportPng = useCallback(() => {
