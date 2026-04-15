@@ -15,6 +15,7 @@ import {
   useRef,
   useState,
 } from 'react'
+import { createPortal } from 'react-dom'
 import { useViewportAwarePopoverPlacement } from '../hooks/use-viewport-aware-popover'
 import { installArtboardCenterSnap } from '../lib/fabric-artboard-center-snap'
 import { removeActiveObjectFromCanvas } from '../lib/fabric-remove-selection'
@@ -60,6 +61,7 @@ import {
   fitTextboxWidthToContent,
   textboxUsesAutoWidth,
 } from '../lib/avnac-textbox-autowidth'
+import { alignSelectedObjectsRelative } from '../lib/fabric-align-selection-elements'
 import {
   computeTransformDimensionUi,
   TRANSFORM_DIMENSION_END_ACTIONS,
@@ -907,8 +909,7 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
 
     const updateTransformDimensionOverlay = () => {
       const frame = artboardFrameRef.current
-      const cluster = artboardClusterRef.current
-      if (!frame || !cluster) return
+      if (!frame) return
       const target = canvas.getActiveObject()
       if (!target) {
         setTransformDimensionUi(null)
@@ -918,7 +919,7 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
         setTransformDimensionUi(null)
         return
       }
-      const ui = computeTransformDimensionUi(canvas, frame, cluster, target)
+      const ui = computeTransformDimensionUi(canvas, frame, target)
       setTransformDimensionUi(ui)
     }
 
@@ -944,6 +945,33 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
       canvas.off('selection:cleared', hideOverlay)
     }
   }, [ready])
+
+  useEffect(() => {
+    if (!transformDimensionUi || !ready) return
+    const refresh = () => {
+      const c = fabricCanvasRef.current
+      const frame = artboardFrameRef.current
+      if (!c || !frame) return
+      const target = c.getActiveObject()
+      if (!target) {
+        setTransformDimensionUi(null)
+        return
+      }
+      if ('isEditing' in target && (target as IText).isEditing) {
+        setTransformDimensionUi(null)
+        return
+      }
+      const ui = computeTransformDimensionUi(c, frame, target)
+      if (ui) setTransformDimensionUi(ui)
+    }
+    const vp = viewportRef.current
+    vp?.addEventListener('scroll', refresh, { passive: true })
+    window.addEventListener('resize', refresh)
+    return () => {
+      vp?.removeEventListener('scroll', refresh)
+      window.removeEventListener('resize', refresh)
+    }
+  }, [transformDimensionUi, ready])
 
   useEffect(() => {
     if (!shapesPopoverOpen) return
@@ -1495,6 +1523,16 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
     selectionTick()
   }, [])
 
+  const alignSelectedElements = useCallback((kind: CanvasAlignKind) => {
+    const canvas = fabricCanvasRef.current
+    const mod = fabricModRef.current
+    if (!canvas || !mod) return
+    alignSelectedObjectsRelative(canvas, mod, kind)
+    selectionTick()
+    syncTextToolbar()
+    syncShapeToolbar()
+  }, [syncShapeToolbar, syncTextToolbar])
+
   const groupSelection = useCallback(() => {
     const canvas = fabricCanvasRef.current
     const mod = fabricModRef.current
@@ -1602,6 +1640,7 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
 
   let elementToolbarLockedDisplay = false
   let elementToolbarCanGroup = false
+  let elementToolbarCanAlignElements = false
   let elementToolbarCanUngroup = false
   let elementToolbarAlignAlready: Record<CanvasAlignKind, boolean> | null = null
   {
@@ -1620,6 +1659,7 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
           elementToolbarCanGroup =
             objs.length >= 2 &&
             !objs.some((o) => 'isEditing' in o && (o as IText).isEditing)
+          elementToolbarCanAlignElements = elementToolbarCanGroup
         } else if (
           a instanceof mod.Group &&
           !(mod.ActiveSelection && a instanceof mod.ActiveSelection)
@@ -1765,8 +1805,10 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
                   }
                 }
                 canGroup={elementToolbarCanGroup}
+                canAlignElements={elementToolbarCanAlignElements}
                 canUngroup={elementToolbarCanUngroup}
                 onGroup={groupSelection}
+                onAlignElements={alignSelectedElements}
                 onUngroup={ungroupSelection}
               />
             ) : null}
@@ -1803,19 +1845,6 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
                 </div>
               ) : null}
             </div>
-            {ready && transformDimensionUi ? (
-              <div
-                className="pointer-events-none absolute z-[25] rounded-md bg-neutral-900 px-2 py-1 text-[11px] font-medium leading-5 tabular-nums text-white shadow-md"
-                style={{
-                  left: transformDimensionUi.left,
-                  top: transformDimensionUi.top,
-                }}
-                role="status"
-                aria-live="polite"
-              >
-                {transformDimensionUi.text}
-              </div>
-            ) : null}
           </div>
         </div>
 
@@ -1919,6 +1948,22 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
           </span>
         </div>
       ) : null}
+      {ready && transformDimensionUi
+        ? createPortal(
+            <div
+              className="pointer-events-none fixed z-[10050] rounded-md bg-neutral-900 px-2 py-1 text-[11px] font-medium leading-5 tabular-nums text-white shadow-md"
+              style={{
+                left: transformDimensionUi.left,
+                top: transformDimensionUi.top,
+              }}
+              role="status"
+              aria-live="polite"
+            >
+              {transformDimensionUi.text}
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   )
 },
