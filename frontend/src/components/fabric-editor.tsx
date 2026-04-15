@@ -1364,6 +1364,75 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
     selectionTick()
   }, [])
 
+  const groupSelection = useCallback(() => {
+    const canvas = fabricCanvasRef.current
+    const mod = fabricModRef.current
+    if (!canvas || !mod?.ActiveSelection) return
+    const active = canvas.getActiveObject()
+    if (!(active instanceof mod.ActiveSelection)) return
+    const objs = active.getObjects()
+    if (objs.length < 2) return
+    for (const o of objs) {
+      if ('isEditing' in o && (o as IText).isEditing) return
+    }
+    const snapshot = [...objs]
+    canvas.discardActiveObject()
+    const group = new mod.Group(snapshot, { canvas })
+    canvas.add(group)
+    canvas.setActiveObject(group)
+    canvas.requestRenderAll()
+    setHasObjectSelected(true)
+    setCanvasBodySelected(false)
+    selectionTick()
+    syncTextToolbar()
+    syncShapeToolbar()
+  }, [syncShapeToolbar, syncTextToolbar])
+
+  const ungroupSelection = useCallback(() => {
+    const canvas = fabricCanvasRef.current
+    const mod = fabricModRef.current
+    if (!canvas || !mod) return
+    const g = canvas.getActiveObject()
+    if (!g || !(g instanceof mod.Group)) return
+    if (mod.ActiveSelection && g instanceof mod.ActiveSelection) return
+    const meta = getAvnacShapeMeta(g)
+    if (meta?.kind === 'arrow') return
+
+    canvas.discardActiveObject()
+    const items = g.removeAll()
+    canvas.remove(g)
+    for (const o of items) {
+      canvas.add(o)
+    }
+    if (items.length === 1) {
+      canvas.setActiveObject(items[0]!)
+    } else if (items.length > 1) {
+      const sel = new mod.ActiveSelection(items, { canvas })
+      canvas.setActiveObject(sel)
+    }
+    canvas.requestRenderAll()
+    setHasObjectSelected(items.length > 0)
+    setCanvasBodySelected(items.length === 0)
+    selectionTick()
+    syncTextToolbar()
+    syncShapeToolbar()
+  }, [syncShapeToolbar, syncTextToolbar])
+
+  useEffect(() => {
+    if (!ready) return
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement
+      if (t.closest('input, textarea, [contenteditable="true"]')) return
+      if (!(e.metaKey || e.ctrlKey)) return
+      if (e.key !== 'g' && e.key !== 'G') return
+      e.preventDefault()
+      if (e.shiftKey) ungroupSelection()
+      else groupSelection()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [ready, groupSelection, ungroupSelection])
+
   function deleteSelection() {
     const canvas = fabricCanvasRef.current
     if (!canvas) return
@@ -1402,6 +1471,8 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
   }
 
   let elementToolbarLockedDisplay = false
+  let elementToolbarCanGroup = false
+  let elementToolbarCanUngroup = false
   let elementToolbarAlignAlready: Record<CanvasAlignKind, boolean> | null = null
   {
     const c = fabricCanvasRef.current
@@ -1416,6 +1487,16 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
           const objs = a.getObjects()
           elementToolbarLockedDisplay =
             objs.length > 0 && objs.every((o) => getAvnacLocked(o))
+          elementToolbarCanGroup =
+            objs.length >= 2 &&
+            !objs.some((o) => 'isEditing' in o && (o as IText).isEditing)
+        } else if (
+          a instanceof mod.Group &&
+          !(mod.ActiveSelection && a instanceof mod.ActiveSelection)
+        ) {
+          elementToolbarLockedDisplay = getAvnacLocked(a)
+          elementToolbarCanUngroup =
+            getAvnacShapeMeta(a)?.kind !== 'arrow'
         } else {
           elementToolbarLockedDisplay = getAvnacLocked(a)
         }
@@ -1533,6 +1614,10 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
                     bottom: false,
                   }
                 }
+                canGroup={elementToolbarCanGroup}
+                canUngroup={elementToolbarCanUngroup}
+                onGroup={groupSelection}
+                onUngroup={ungroupSelection}
               />
             ) : null}
             <div
