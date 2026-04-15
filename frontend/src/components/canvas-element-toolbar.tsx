@@ -24,12 +24,13 @@ import {
   type CSSProperties,
   type RefObject,
 } from 'react'
-import { useContainedViewportPopoverPlacement } from '../hooks/use-viewport-aware-popover'
+import { useContainedHorizontalPopoverPlacement } from '../hooks/use-viewport-aware-popover'
 import {
   FloatingToolbarDivider,
   FloatingToolbarShell,
   floatingToolbarIconButton,
   floatingToolbarPopoverClass,
+  floatingToolbarPopoverMenuClass,
 } from './floating-toolbar-shell'
 
 export type CanvasAlignKind =
@@ -74,23 +75,15 @@ const CanvasElementToolbar = forwardRef<HTMLDivElement, CanvasElementToolbarProp
     const [moreOpen, setMoreOpen] = useState(false)
     const [alignOpen, setAlignOpen] = useState(false)
     const moreWrapRef = useRef<HTMLDivElement>(null)
-    const moreMenuAnchorRef = useRef<HTMLButtonElement>(null)
     const morePanelRef = useRef<HTMLDivElement>(null)
     const pickMorePanel = useCallback(
       () => morePanelRef.current,
       [],
     )
-    const moreMenuEstimateH = 170
-    const {
-      openUpward: morePopoverUp,
-      shiftX: morePopoverShiftX,
-    } = useContainedViewportPopoverPlacement(
+    const morePopoverShift = useContainedHorizontalPopoverPlacement(
       moreOpen,
-      moreMenuAnchorRef,
       viewportRef,
-      moreMenuEstimateH,
       pickMorePanel,
-      'right',
     )
 
     useEffect(() => {
@@ -119,71 +112,73 @@ const CanvasElementToolbar = forwardRef<HTMLDivElement, CanvasElementToolbarProp
         }}
       >
         <FloatingToolbarShell role="toolbar" aria-label="Element actions">
-          <button
-            type="button"
-            className={floatingToolbarIconButton(false)}
-            title="Duplicate"
-            aria-label="Duplicate"
-            onClick={onDuplicate}
+          <div
+            ref={moreWrapRef}
+            className="relative flex items-stretch overflow-visible"
           >
-            <HugeiconsIcon icon={Layers01Icon} size={18} strokeWidth={1.75} />
-          </button>
-          <button
-            type="button"
-            className={floatingToolbarIconButton(locked)}
-            title={locked ? 'Unlock' : 'Lock'}
-            aria-label={locked ? 'Unlock' : 'Lock'}
-            aria-pressed={locked}
-            onClick={onToggleLock}
-          >
-            <HugeiconsIcon
-              icon={locked ? SquareLock01Icon : SquareUnlock01Icon}
-              size={18}
-              strokeWidth={1.75}
-            />
-          </button>
-          <button
-            type="button"
-            className={floatingToolbarIconButton(false)}
-            title="Delete"
-            aria-label="Delete"
-            onClick={onDelete}
-          >
-            <HugeiconsIcon icon={Delete02Icon} size={18} strokeWidth={1.75} />
-          </button>
-          <FloatingToolbarDivider />
-          <div ref={moreWrapRef} className="relative flex items-center pr-1">
             <button
-              ref={moreMenuAnchorRef}
               type="button"
-              className={floatingToolbarIconButton(moreOpen)}
-              title="More options"
-              aria-label="More options"
-              aria-expanded={moreOpen}
-              aria-haspopup="menu"
-              onClick={() => {
-                setMoreOpen((o) => !o)
-                setAlignOpen(false)
-              }}
+              className={floatingToolbarIconButton(false)}
+              title="Duplicate"
+              aria-label="Duplicate"
+              onClick={onDuplicate}
             >
-              <HugeiconsIcon icon={More01Icon} size={18} strokeWidth={1.75} />
+              <HugeiconsIcon icon={Layers01Icon} size={18} strokeWidth={1.75} />
             </button>
-            {moreOpen ? (
-              <div
-                ref={morePanelRef}
-                role="menu"
-                className={[
-                  'absolute right-0 z-[60] min-w-[11rem] py-1',
-                  morePopoverUp ? 'bottom-full mb-1.5' : 'top-full mt-1.5',
-                  floatingToolbarPopoverClass,
-                ].join(' ')}
-                style={{
-                  transform:
-                    morePopoverShiftX !== 0
-                      ? `translateX(${morePopoverShiftX}px)`
-                      : undefined,
+            <button
+              type="button"
+              className={floatingToolbarIconButton(locked)}
+              title={locked ? 'Unlock' : 'Lock'}
+              aria-label={locked ? 'Unlock' : 'Lock'}
+              aria-pressed={locked}
+              onClick={onToggleLock}
+            >
+              <HugeiconsIcon
+                icon={locked ? SquareLock01Icon : SquareUnlock01Icon}
+                size={18}
+                strokeWidth={1.75}
+              />
+            </button>
+            <button
+              type="button"
+              className={floatingToolbarIconButton(false)}
+              title="Delete"
+              aria-label="Delete"
+              onClick={onDelete}
+            >
+              <HugeiconsIcon icon={Delete02Icon} size={18} strokeWidth={1.75} />
+            </button>
+            <FloatingToolbarDivider />
+            <div className="relative flex items-center pr-1">
+              <button
+                type="button"
+                className={floatingToolbarIconButton(moreOpen)}
+                title="More options"
+                aria-label="More options"
+                aria-expanded={moreOpen}
+                aria-haspopup="menu"
+                onClick={() => {
+                  setMoreOpen((o) => !o)
+                  setAlignOpen(false)
                 }}
               >
+                <HugeiconsIcon icon={More01Icon} size={18} strokeWidth={1.75} />
+              </button>
+              {moreOpen ? (
+                <div
+                  ref={morePanelRef}
+                  role="menu"
+                  className={[
+                    'absolute left-0 top-full z-[60] mt-1.5 min-w-[11rem] py-1',
+                    floatingToolbarPopoverMenuClass,
+                  ].join(' ')}
+                  style={{
+                    transform:
+                      morePopoverShift.x !== 0 || morePopoverShift.y !== 0
+                        ? `translate(${morePopoverShift.x}px, ${morePopoverShift.y}px)`
+                        : undefined,
+                  }}
+                >
                 <button
                   type="button"
                   role="menuitem"
@@ -238,7 +233,7 @@ const CanvasElementToolbar = forwardRef<HTMLDivElement, CanvasElementToolbarProp
                     <div
                       role="menu"
                       className={[
-                        'absolute left-full top-0 z-[61] ml-1.5 min-w-[11rem] py-1',
+                        'absolute left-full top-1/2 z-[61] ml-1.5 min-w-[11rem] -translate-y-1/2 py-1',
                         floatingToolbarPopoverClass,
                       ].join(' ')}
                     >
@@ -360,7 +355,8 @@ const CanvasElementToolbar = forwardRef<HTMLDivElement, CanvasElementToolbarProp
                   ) : null}
                 </div>
               </div>
-            ) : null}
+              ) : null}
+            </div>
           </div>
         </FloatingToolbarShell>
       </div>
