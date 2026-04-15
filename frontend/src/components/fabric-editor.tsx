@@ -84,6 +84,11 @@ import {
   setSceneCornerRadiusOnImage,
   setSceneCornerRadiusOnRect,
 } from '../lib/fabric-corner-radius'
+import {
+  installAvnacObjectCanvasBlur,
+  migrateLegacyImageBlurFilters,
+  readBlurPctFromFabricObject,
+} from '../lib/avnac-object-blur'
 import { linearGradientForBox } from '../lib/fabric-linear-gradient'
 import { loadGoogleFontFamily } from '../lib/load-google-font'
 import ShapeOptionsToolbar from './shape-options-toolbar'
@@ -99,6 +104,7 @@ import BackgroundPopover, {
   bgValueToSwatch,
   type BgValue,
 } from './background-popover'
+import BlurToolbarControl from './blur-toolbar-control'
 import CornerRadiusToolbarControl from './corner-radius-toolbar-control'
 import CanvasZoomSlider from './canvas-zoom-slider'
 import CanvasElementToolbar, {
@@ -123,7 +129,11 @@ const ARTBOARD_ALIGN_ALREADY_EPS = 2
 const ZOOM_MIN_PCT = 5
 const ZOOM_MAX_PCT = 100
 
-const OBJECT_SERIAL_KEYS = ['avnacShape', 'avnacLocked'] as const
+const OBJECT_SERIAL_KEYS = [
+  'avnacShape',
+  'avnacLocked',
+  'avnacBlur',
+] as const
 
 const DEFAULT_PAINT: BgValue = { type: 'solid', color: '#262626' }
 
@@ -317,6 +327,7 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
     radius: number
     max: number
   } | null>(null)
+  const [selectionBlurPct, setSelectionBlurPct] = useState(0)
   const [selectionOpacityPct, setSelectionOpacityPct] = useState(100)
   const [sceneSnapGuides, setSceneSnapGuides] = useState<SceneSnapGuide[]>([])
   const [artboardEmptyHovered, setArtboardEmptyHovered] = useState(false)
@@ -428,6 +439,33 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
       radius: sceneCornerRadiusFromImage(obj, mod.Rect),
       max: sceneCornerRadiusMaxForObject(obj),
     })
+  }, [])
+
+  const syncSelectionBlur = useCallback(() => {
+    const canvas = fabricCanvasRef.current
+    if (!canvas) {
+      setSelectionBlurPct(0)
+      return
+    }
+    const active = canvas.getActiveObject()
+    if (!active) {
+      setSelectionBlurPct(0)
+      return
+    }
+    if ('multiSelectionStacking' in active) {
+      const objs = canvas.getActiveObjects()
+      if (objs.length === 0) {
+        setSelectionBlurPct(0)
+        return
+      }
+      let sum = 0
+      for (const o of objs) {
+        sum += readBlurPctFromFabricObject(o)
+      }
+      setSelectionBlurPct(Math.round(sum / objs.length))
+      return
+    }
+    setSelectionBlurPct(readBlurPctFromFabricObject(active))
   }, [])
 
   const syncSelectionOpacity = useCallback(() => {
@@ -584,6 +622,32 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
     })
   }, [])
 
+  const applyBlurToSelection = useCallback(
+    (pct: number) => {
+      const canvas = fabricCanvasRef.current
+      if (!canvas) return
+      const active = canvas.getActiveObject()
+      if (!active) return
+      const clamped = Math.max(0, Math.min(100, Math.round(pct)))
+      if ('multiSelectionStacking' in active) {
+        for (const o of canvas.getActiveObjects()) {
+          o.set({ avnacBlur: clamped })
+          o.set('dirty', true)
+          o.setCoords()
+        }
+      } else {
+        active.set({ avnacBlur: clamped })
+        active.set('dirty', true)
+        active.setCoords()
+      }
+      canvas.requestRenderAll()
+      setSelectionBlurPct(clamped)
+      syncTextToolbar()
+      syncShapeToolbar()
+    },
+    [syncTextToolbar, syncShapeToolbar],
+  )
+
   const syncSelection = useCallback(() => {
     const canvas = fabricCanvasRef.current
     const mod = fabricModRef.current
@@ -592,6 +656,7 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
     setHasObjectSelected(!!obj)
     if (!obj || !mod) {
       setSelectionOpacityPct(100)
+      setSelectionBlurPct(0)
       selectionTick()
       return
     }
@@ -609,8 +674,9 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
       setSelectedPaint(bgValueFromFabricFill(obj))
     }
     syncSelectionOpacity()
+    syncSelectionBlur()
     selectionTick()
-  }, [syncSelectionOpacity])
+  }, [syncSelectionOpacity, syncSelectionBlur])
 
   const syncFillFromSelection = useCallback(() => {
     const canvas = fabricCanvasRef.current
@@ -755,6 +821,17 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
   const refreshElementToolbarLayoutRef = useRef(updateElementToolbarLayout)
   refreshElementToolbarLayoutRef.current = updateElementToolbarLayout
 
+  const syncFillFromSelectionRef = useRef(syncFillFromSelection)
+  syncFillFromSelectionRef.current = syncFillFromSelection
+  const syncTextToolbarRef = useRef(syncTextToolbar)
+  syncTextToolbarRef.current = syncTextToolbar
+  const syncShapeToolbarRef = useRef(syncShapeToolbar)
+  syncShapeToolbarRef.current = syncShapeToolbar
+  const syncSelectionOpacityRef = useRef(syncSelectionOpacity)
+  syncSelectionOpacityRef.current = syncSelectionOpacity
+  const syncSelectionBlurRef = useRef(syncSelectionBlur)
+  syncSelectionBlurRef.current = syncSelectionBlur
+
   useEffect(() => {
     const canvas = fabricCanvasRef.current
     const mod = fabricModRef.current
@@ -810,7 +887,7 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
     }
   }, [ready, artboardW, artboardH, fitArtboardToViewport])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const el = canvasElRef.current
     if (!el) return
 
@@ -831,28 +908,42 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
       setHasObjectSelected(false)
       setCanvasBodySelected(true)
       selectionTick()
-      syncTextToolbar()
-      syncShapeToolbar()
+      syncTextToolbarRef.current()
+      syncShapeToolbarRef.current()
     }
 
     void (async () => {
-      const mod = await import('fabric')
+      let mod: typeof import('fabric') | null = null
+      try {
+        mod = await import('fabric')
+      } catch (err) {
+        console.error('FabricEditor: failed to load fabric', err)
+        return
+      }
       if (disposed || !canvasElRef.current) return
 
-      mod.config.configure({
-        maxCacheSideLimit: 8192,
-        perfLimitSizeTotal: 16 * 1024 * 1024,
-      })
-      Object.assign(mod.IText.ownDefaults, { objectCaching: false })
+      try {
+        mod.config.configure({
+          maxCacheSideLimit: 8192,
+          perfLimitSizeTotal: 16 * 1024 * 1024,
+        })
+        Object.assign(mod.IText.ownDefaults, { objectCaching: false })
 
-      for (const k of OBJECT_SERIAL_KEYS) {
-        if (!mod.FabricObject.customProperties.includes(k)) {
-          mod.FabricObject.customProperties.push(k)
+        for (const k of OBJECT_SERIAL_KEYS) {
+          if (!mod.FabricObject.customProperties.includes(k)) {
+            mod.FabricObject.customProperties.push(k)
+          }
         }
-      }
 
-      fabricModRef.current = mod
-      installFabricSelectionChrome(mod)
+        installAvnacObjectCanvasBlur(mod)
+
+        fabricModRef.current = mod
+        installFabricSelectionChrome(mod)
+      } catch (err) {
+        console.error('FabricEditor: failed to configure fabric', err)
+        fabricModRef.current = null
+        return
+      }
       const aw0 = artboardWRef.current
       const ah0 = artboardHRef.current
       canvas = new mod.Canvas(canvasElRef.current, {
@@ -932,13 +1023,14 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
       canvas.on('mouse:down:before', onAltDuplicateBefore)
 
       const onSelect = () => {
-        syncFillFromSelection()
+        syncFillFromSelectionRef.current()
         setHasObjectSelected(true)
         setCanvasBodySelected(false)
         selectionTick()
-        syncTextToolbar()
-        syncShapeToolbar()
-        syncSelectionOpacity()
+        syncTextToolbarRef.current()
+        syncShapeToolbarRef.current()
+        syncSelectionOpacityRef.current()
+        syncSelectionBlurRef.current()
       }
       const onClear = () => {
         setHasObjectSelected(false)
@@ -947,6 +1039,7 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
         setTextToolbarValues(null)
         setShapeToolbarModel(null)
         setSelectionOpacityPct(100)
+        setSelectionBlurPct(0)
         selectionTick()
       }
 
@@ -1011,12 +1104,7 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
       setReady(false)
       void c?.dispose()
     }
-  }, [
-    syncFillFromSelection,
-    syncTextToolbar,
-    syncShapeToolbar,
-    syncSelectionOpacity,
-  ])
+  }, [])
 
   useEffect(() => {
     if (!ready) return
@@ -1120,6 +1208,7 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
     if (!ready) return
     syncShapeToolbar()
     syncSelectionOpacity()
+    syncSelectionBlur()
     syncImageCornerToolbar()
   }, [
     ready,
@@ -1127,6 +1216,7 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
     zoomPercent,
     syncShapeToolbar,
     syncSelectionOpacity,
+    syncSelectionBlur,
     syncImageCornerToolbar,
   ])
 
@@ -1899,6 +1989,11 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
         })
         setBgValue(doc.bg)
         await canvas.loadFromJSON(doc.fabric)
+        try {
+          migrateLegacyImageBlurFilters(canvas, mod)
+        } catch (err) {
+          console.error('FabricEditor: legacy blur migration failed', err)
+        }
         const z = zoomPercentRef.current ?? 100
         const s = z / 100
         canvas.setDimensions({
@@ -2319,11 +2414,18 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
     }
   }
 
-  const selectionTransparencySlot = hasObjectSelected ? (
-    <TransparencyToolbarPopover
-      opacityPct={selectionOpacityPct}
-      onChange={applyOpacityToSelection}
-    />
+  const selectionEffectsFooterSlot = hasObjectSelected ? (
+    <>
+      <BlurToolbarControl
+        blurPct={selectionBlurPct}
+        onChange={applyBlurToSelection}
+      />
+      <FloatingToolbarDivider />
+      <TransparencyToolbarPopover
+        opacityPct={selectionOpacityPct}
+        onChange={applyOpacityToSelection}
+      />
+    </>
   ) : null
 
   return (
@@ -2346,7 +2448,7 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
           <TextFormatToolbar
             values={textToolbarValues}
             onChange={onTextFormatChange}
-            footerSlot={selectionTransparencySlot}
+            footerSlot={selectionEffectsFooterSlot}
           />
         ) : null}
         {ready && !textToolbarValues && shapeToolbarModel ? (
@@ -2375,7 +2477,7 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
                 ? applyRectCornerRadius
                 : undefined
             }
-            footerSlot={selectionTransparencySlot}
+            footerSlot={selectionEffectsFooterSlot}
           />
         ) : null}
         {ready &&
@@ -2385,18 +2487,16 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
           <FloatingToolbarShell role="toolbar" aria-label="Selection">
             <div className="flex items-center py-1 pl-2 pr-2">
               {imageCornerToolbar ? (
-                <CornerRadiusToolbarControl
-                  value={imageCornerToolbar.radius}
-                  max={imageCornerToolbar.max}
-                  onChange={applyImageCornerRadius}
-                />
-              ) : null}
-              {selectionTransparencySlot ? (
                 <>
-                  {imageCornerToolbar ? <FloatingToolbarDivider /> : null}
-                  {selectionTransparencySlot}
+                  <CornerRadiusToolbarControl
+                    value={imageCornerToolbar.radius}
+                    max={imageCornerToolbar.max}
+                    onChange={applyImageCornerRadius}
+                  />
+                  <FloatingToolbarDivider />
                 </>
               ) : null}
+              {selectionEffectsFooterSlot}
             </div>
           </FloatingToolbarShell>
         ) : null}
