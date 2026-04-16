@@ -82,11 +82,6 @@
     color: inherit;
   }
 
-  .page-wrap {
-    width: min(720px, 100%);
-    margin-inline: auto;
-  }
-
   .display-title {
     font-family: "Fraunces", Georgia, serif;
     font-optical-sizing: auto;
@@ -118,6 +113,77 @@
 
   .rise-in {
     animation: rise-in 640ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  .hero-headline {
+    font-size: clamp(2.875rem, 7vw, 5.5rem);
+    line-height: 1.03;
+    letter-spacing: -0.035em;
+  }
+
+  .hero-page {
+    background:
+      radial-gradient(ellipse 85% 55% at 50% -15%, rgba(255, 255, 255, 0.75), transparent 52%),
+      linear-gradient(180deg, #f6f6f4 0%, #ececea 100%);
+  }
+
+  .hero-grid {
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(250, 250, 250, 0.65), rgba(250, 250, 250, 0.65)),
+      linear-gradient(to right, rgba(10, 10, 10, 0.022) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(10, 10, 10, 0.022) 1px, transparent 1px);
+    background-size:
+      100% 100%,
+      72px 72px,
+      72px 72px;
+    mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.22), transparent 72%);
+    pointer-events: none;
+  }
+
+  .hero-bg-orb {
+    position: absolute;
+    border-radius: 999px;
+    filter: blur(48px);
+    opacity: 0.38;
+    pointer-events: none;
+  }
+
+  .hero-bg-orb-a {
+    top: 5%;
+    left: -12%;
+    width: 28rem;
+    height: 28rem;
+    background: radial-gradient(
+      circle at 40% 40%,
+      rgba(120, 120, 120, 0.12),
+      transparent 62%
+    );
+  }
+
+  .hero-bg-orb-b {
+    right: -10%;
+    bottom: 0;
+    width: 30rem;
+    height: 30rem;
+    background: radial-gradient(
+      circle at 35% 35%,
+      rgba(100, 100, 120, 0.1),
+      transparent 58%
+    );
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .rise-in {
+      animation: none;
+    }
+
+    button,
+    .island-shell,
+    a {
+      transition: none;
+    }
   }
 
   @keyframes rise-in {
