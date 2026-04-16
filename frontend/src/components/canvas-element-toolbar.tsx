@@ -22,12 +22,16 @@ import {
   forwardRef,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type CSSProperties,
   type RefObject,
 } from 'react'
-import { useContainedHorizontalPopoverPlacement } from '../hooks/use-viewport-aware-popover'
+import {
+  measureHorizontalFlyoutInContainer,
+  useContainedHorizontalPopoverPlacement,
+} from '../hooks/use-viewport-aware-popover'
 import {
   FloatingToolbarDivider,
   FloatingToolbarShell,
@@ -92,6 +96,8 @@ const CanvasElementToolbar = forwardRef<HTMLDivElement, CanvasElementToolbarProp
     const [alignElementsOpen, setAlignElementsOpen] = useState(false)
     const moreWrapRef = useRef<HTMLDivElement>(null)
     const morePanelRef = useRef<HTMLDivElement>(null)
+    const alignElementsFlyoutRef = useRef<HTMLDivElement>(null)
+    const alignPageFlyoutRef = useRef<HTMLDivElement>(null)
     const pickMorePanel = useCallback(
       () => morePanelRef.current,
       [],
@@ -101,6 +107,64 @@ const CanvasElementToolbar = forwardRef<HTMLDivElement, CanvasElementToolbarProp
       viewportRef,
       pickMorePanel,
     )
+    const [alignElementsFlyoutShift, setAlignElementsFlyoutShift] = useState({
+      x: 0,
+      y: 0,
+    })
+    const [alignPageFlyoutShift, setAlignPageFlyoutShift] = useState({
+      x: 0,
+      y: 0,
+    })
+
+    useLayoutEffect(() => {
+      if (!moreOpen) {
+        setAlignElementsFlyoutShift({ x: 0, y: 0 })
+        setAlignPageFlyoutShift({ x: 0, y: 0 })
+        return
+      }
+
+      function sync() {
+        const viewport = viewportRef.current
+        if (!viewport) return
+        if (alignElementsOpen) {
+          const panel = alignElementsFlyoutRef.current
+          if (panel) {
+            const { shiftX, shiftY } = measureHorizontalFlyoutInContainer(
+              viewport,
+              panel,
+            )
+            setAlignElementsFlyoutShift({ x: shiftX, y: shiftY })
+          }
+        } else {
+          setAlignElementsFlyoutShift({ x: 0, y: 0 })
+        }
+        if (alignOpen) {
+          const panel = alignPageFlyoutRef.current
+          if (panel) {
+            const { shiftX, shiftY } = measureHorizontalFlyoutInContainer(
+              viewport,
+              panel,
+            )
+            setAlignPageFlyoutShift({ x: shiftX, y: shiftY })
+          }
+        } else {
+          setAlignPageFlyoutShift({ x: 0, y: 0 })
+        }
+      }
+
+      sync()
+      window.addEventListener('resize', sync)
+      window.addEventListener('scroll', sync, true)
+      return () => {
+        window.removeEventListener('resize', sync)
+        window.removeEventListener('scroll', sync, true)
+      }
+    }, [
+      moreOpen,
+      alignElementsOpen,
+      alignOpen,
+      viewportRef,
+    ])
 
     useEffect(() => {
       if (!moreOpen && !alignOpen && !alignElementsOpen) return
@@ -317,7 +381,7 @@ const CanvasElementToolbar = forwardRef<HTMLDivElement, CanvasElementToolbarProp
                 </button>
                 <div className="my-1 h-px bg-black/[0.06]" aria-hidden />
                 {canAlignElements ? (
-                  <div className="relative">
+                  <div className="relative w-full shrink-0">
                     <button
                       type="button"
                       className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-[13px] font-medium text-neutral-800 hover:bg-black/[0.05]"
@@ -345,11 +409,19 @@ const CanvasElementToolbar = forwardRef<HTMLDivElement, CanvasElementToolbarProp
                     </button>
                     {alignElementsOpen ? (
                       <div
+                        ref={alignElementsFlyoutRef}
                         role="menu"
                         className={[
-                          'absolute left-full top-1/2 z-[61] ml-1.5 min-w-[10.5rem] -translate-y-1/2 py-1',
+                          'absolute left-full top-0 z-[61] ml-1.5 min-w-[10.5rem] py-1',
                           floatingToolbarPopoverClass,
                         ].join(' ')}
+                        style={{
+                          transform:
+                            alignElementsFlyoutShift.x !== 0 ||
+                            alignElementsFlyoutShift.y !== 0
+                              ? `translate(${alignElementsFlyoutShift.x}px, ${alignElementsFlyoutShift.y}px)`
+                              : undefined,
+                        }}
                       >
                         <button
                           type="button"
@@ -464,7 +536,7 @@ const CanvasElementToolbar = forwardRef<HTMLDivElement, CanvasElementToolbarProp
                     ) : null}
                   </div>
                 ) : null}
-                <div className="relative">
+                <div className="relative w-full shrink-0">
                   <button
                     type="button"
                     className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-[13px] font-medium text-neutral-800 hover:bg-black/[0.05]"
@@ -484,11 +556,19 @@ const CanvasElementToolbar = forwardRef<HTMLDivElement, CanvasElementToolbarProp
                   </button>
                   {alignOpen ? (
                     <div
+                      ref={alignPageFlyoutRef}
                       role="menu"
                       className={[
-                        'absolute left-full top-1/2 z-[61] ml-1.5 min-w-[11rem] -translate-y-1/2 py-1',
+                        'absolute left-full top-0 z-[61] ml-1.5 min-w-[11rem] py-1',
                         floatingToolbarPopoverClass,
                       ].join(' ')}
+                      style={{
+                        transform:
+                          alignPageFlyoutShift.x !== 0 ||
+                          alignPageFlyoutShift.y !== 0
+                            ? `translate(${alignPageFlyoutShift.x}px, ${alignPageFlyoutShift.y}px)`
+                            : undefined,
+                      }}
                     >
                       <button
                         type="button"
