@@ -9,6 +9,8 @@ const ROWS: ShortcutRow[] = [
   { keys: 'Cmd/Ctrl + G', action: 'Group selection' },
   { keys: 'Cmd/Ctrl + Shift + G', action: 'Ungroup' },
   { keys: 'Cmd/Ctrl + C / V', action: 'Copy / paste (Avnac clipboard)' },
+  { keys: 'Arrow keys', action: 'Nudge selection 1px' },
+  { keys: 'Shift + Arrow keys', action: 'Nudge selection 5px' },
   { keys: 'Delete / Backspace', action: 'Delete selection' },
   { keys: 'Option/Alt + drag', action: 'Duplicate while dragging' },
   { keys: '?', action: 'Show shortcuts' },
