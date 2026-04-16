@@ -1,5 +1,4 @@
 import { HeadContent, Scripts, createRootRoute } from '@tanstack/react-router'
-import { TanStackRouterDevtoolsPanel } from '@tanstack/react-router-devtools'
 import { TanStackDevtools } from '@tanstack/react-devtools'
 
 import NativeTitleTooltip from '../components/native-title-tooltip'
@@ -43,19 +42,6 @@ function RootDocument({ children }: { children: React.ReactNode }) {
       <body className="font-sans antialiased selection:bg-neutral-200 selection:text-[var(--text)]">
         <NativeTitleTooltip />
         {children}
-        {import.meta.env.DEV ? (
-          <TanStackDevtools
-            config={{
-              position: 'bottom-right',
-            }}
-            plugins={[
-              {
-                name: 'Tanstack Router',
-                render: <TanStackRouterDevtoolsPanel />,
-              },
-            ]}
-          />
-        ) : null}
         <Scripts />
       </body>
     </html>
