@@ -329,6 +329,39 @@ export function translateVectorStroke(
   return next
 }
 
+export function scaleVectorStroke(
+  s: VectorBoardStroke,
+  ax: number,
+  ay: number,
+  sx: number,
+  sy: number,
+): VectorBoardStroke {
+  const mapPt = (p: [number, number]): [number, number] => [
+    ax + (p[0] - ax) * sx,
+    ay + (p[1] - ay) * sy,
+  ]
+  const next: VectorBoardStroke = {
+    ...s,
+    points: s.points.map(mapPt),
+  }
+  if (s.penAnchors && s.penAnchors.length > 0) {
+    next.penAnchors = s.penAnchors.map((a) => ({
+      ...a,
+      x: ax + (a.x - ax) * sx,
+      y: ay + (a.y - ay) * sy,
+      inX: a.inX != null ? ax + (a.inX - ax) * sx : undefined,
+      inY: a.inY != null ? ay + (a.inY - ay) * sy : undefined,
+      outX: a.outX != null ? ax + (a.outX - ax) * sx : undefined,
+      outY: a.outY != null ? ay + (a.outY - ay) * sy : undefined,
+    }))
+  }
+  const avg = (Math.abs(sx) + Math.abs(sy)) / 2
+  if (Number.isFinite(s.strokeWidthN) && avg > 0) {
+    next.strokeWidthN = s.strokeWidthN * avg
+  }
+  return next
+}
+
 export function applyTranslateStrokeInDoc(
   doc: VectorBoardDocument,
   layerId: string,
@@ -474,6 +507,137 @@ export function findStrokesIntersectingRect(
     }
   }
   return out
+}
+
+export function applyScaleStrokesInDoc(
+  doc: VectorBoardDocument,
+  selections: DocStrokeSelection[],
+  ax: number,
+  ay: number,
+  sx: number,
+  sy: number,
+): VectorBoardDocument {
+  if (selections.length === 0) return doc
+  const index = buildSelectionSet(selections)
+  return {
+    ...doc,
+    layers: doc.layers.map((L) => ({
+      ...L,
+      strokes: L.strokes.map((s) =>
+        index.has(`${L.id}:${s.id}`) ? scaleVectorStroke(s, ax, ay, sx, sy) : s,
+      ),
+    })),
+  }
+}
+
+export function normBoundsForSelections(
+  doc: VectorBoardDocument,
+  selections: DocStrokeSelection[],
+): { minX: number; minY: number; maxX: number; maxY: number } | null {
+  if (selections.length === 0) return null
+  const index = buildSelectionSet(selections)
+  let minX = Infinity
+  let minY = Infinity
+  let maxX = -Infinity
+  let maxY = -Infinity
+  for (const L of doc.layers) {
+    if (!L.visible) continue
+    for (const s of L.strokes) {
+      if (!index.has(`${L.id}:${s.id}`)) continue
+      const b = normBoundsForStroke(s)
+      if (!b) continue
+      if (b.minX < minX) minX = b.minX
+      if (b.minY < minY) minY = b.minY
+      if (b.maxX > maxX) maxX = b.maxX
+      if (b.maxY > maxY) maxY = b.maxY
+    }
+  }
+  if (!Number.isFinite(minX)) return null
+  return { minX, minY, maxX, maxY }
+}
+
+type ZOrderOp = 'front' | 'back' | 'forward' | 'backward'
+
+function reorderStrokesInLayer(
+  strokes: VectorBoardStroke[],
+  selectedIds: Set<string>,
+  op: ZOrderOp,
+): VectorBoardStroke[] {
+  if (strokes.length === 0) return strokes
+  const selectedInOrder = strokes.filter((s) => selectedIds.has(s.id))
+  if (selectedInOrder.length === 0) return strokes
+  if (op === 'front') {
+    const rest = strokes.filter((s) => !selectedIds.has(s.id))
+    return [...rest, ...selectedInOrder]
+  }
+  if (op === 'back') {
+    const rest = strokes.filter((s) => !selectedIds.has(s.id))
+    return [...selectedInOrder, ...rest]
+  }
+  const out = strokes.slice()
+  if (op === 'forward') {
+    for (let i = out.length - 2; i >= 0; i--) {
+      const s = out[i]!
+      if (!selectedIds.has(s.id)) continue
+      const next = out[i + 1]!
+      if (selectedIds.has(next.id)) continue
+      out[i] = next
+      out[i + 1] = s
+    }
+  } else {
+    for (let i = 1; i < out.length; i++) {
+      const s = out[i]!
+      if (!selectedIds.has(s.id)) continue
+      const prev = out[i - 1]!
+      if (selectedIds.has(prev.id)) continue
+      out[i] = prev
+      out[i - 1] = s
+    }
+  }
+  return out
+}
+
+export function applyZOrderInDoc(
+  doc: VectorBoardDocument,
+  selections: DocStrokeSelection[],
+  op: ZOrderOp,
+): VectorBoardDocument {
+  if (selections.length === 0) return doc
+  const byLayer = new Map<string, Set<string>>()
+  for (const sel of selections) {
+    const existing = byLayer.get(sel.layerId) ?? new Set<string>()
+    existing.add(sel.strokeId)
+    byLayer.set(sel.layerId, existing)
+  }
+  return {
+    ...doc,
+    layers: doc.layers.map((L) => {
+      const ids = byLayer.get(L.id)
+      if (!ids) return L
+      return { ...L, strokes: reorderStrokesInLayer(L.strokes, ids, op) }
+    }),
+  }
+}
+
+export function updateStrokeInDocFull(
+  doc: VectorBoardDocument,
+  layerId: string,
+  strokeId: string,
+  patch: Partial<VectorBoardStroke>,
+): VectorBoardDocument {
+  return {
+    ...doc,
+    layers: doc.layers.map((L) =>
+      L.id !== layerId
+        ? L
+        : {
+            ...L,
+            strokes: L.strokes.map((s) =>
+              s.id !== strokeId ? s : { ...s, ...patch },
+            ),
+          },
+    ),
+  }
 }
 
 export function cloneVectorBoardStroke(stroke: VectorBoardStroke): VectorBoardStroke {
