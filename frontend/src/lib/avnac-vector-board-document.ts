@@ -26,6 +26,8 @@ export type VectorBoardStroke = {
    * Cubic Bézier pen path. When length ≥ 2, used instead of polyline `points` for kind `pen`.
    */
   penAnchors?: VectorPenAnchor[]
+  /** When true, last anchor connects back to the first (closed loop). */
+  penClosed?: boolean
   stroke: string
   strokeWidthN: number
   /** Fill for closed shapes (rect, ellipse, polygon). Empty = no fill. */
@@ -128,6 +130,7 @@ function strokeFromUnknown(s: Record<string, unknown>): VectorBoardStroke | null
     fill,
   }
   if (penAnchors) row.penAnchors = penAnchors
+  if (s.penClosed === true) row.penClosed = true
   return row
 }
 
@@ -262,6 +265,117 @@ export function distanceToStroke(
   return best
 }
 
+export const VECTOR_SELECT_HIT_NORM = 0.022
+
+export function findTopStrokeAt(
+  doc: VectorBoardDocument,
+  nx: number,
+  ny: number,
+  threshold = VECTOR_SELECT_HIT_NORM,
+): { layerId: string; stroke: VectorBoardStroke } | null {
+  const order = [...doc.layers].reverse()
+  for (const layer of order) {
+    if (!layer.visible) continue
+    const strokes = [...layer.strokes].reverse()
+    for (const s of strokes) {
+      if (!strokeIsRenderable(s)) continue
+      if (strokeHitAtNorm(nx, ny, s, threshold)) {
+        return { layerId: layer.id, stroke: s }
+      }
+    }
+  }
+  return null
+}
+
+export function translateVectorStroke(
+  s: VectorBoardStroke,
+  dx: number,
+  dy: number,
+): VectorBoardStroke {
+  const mapPt = (p: [number, number]): [number, number] => [
+    p[0] + dx,
+    p[1] + dy,
+  ]
+  const next: VectorBoardStroke = {
+    ...s,
+    points: s.points.map(mapPt),
+  }
+  if (s.penAnchors && s.penAnchors.length > 0) {
+    next.penAnchors = s.penAnchors.map((a) => ({
+      ...a,
+      x: a.x + dx,
+      y: a.y + dy,
+      inX: a.inX != null ? a.inX + dx : undefined,
+      inY: a.inY != null ? a.inY + dy : undefined,
+      outX: a.outX != null ? a.outX + dx : undefined,
+      outY: a.outY != null ? a.outY + dy : undefined,
+    }))
+  }
+  return next
+}
+
+export function applyTranslateStrokeInDoc(
+  doc: VectorBoardDocument,
+  layerId: string,
+  strokeId: string,
+  dx: number,
+  dy: number,
+): VectorBoardDocument {
+  return {
+    ...doc,
+    layers: doc.layers.map((L) =>
+      L.id !== layerId
+        ? L
+        : {
+            ...L,
+            strokes: L.strokes.map((s) =>
+              s.id !== strokeId ? s : translateVectorStroke(s, dx, dy),
+            ),
+          },
+    ),
+  }
+}
+
+export function updateVectorStrokeInDoc(
+  doc: VectorBoardDocument,
+  layerId: string,
+  strokeId: string,
+  patch: Partial<Pick<VectorBoardStroke, 'stroke' | 'fill' | 'strokeWidthN'>>,
+): VectorBoardDocument {
+  return {
+    ...doc,
+    layers: doc.layers.map((L) =>
+      L.id !== layerId
+        ? L
+        : {
+            ...L,
+            strokes: L.strokes.map((s) =>
+              s.id !== strokeId ? s : { ...s, ...patch },
+            ),
+          },
+    ),
+  }
+}
+
+export function normBoundsForStroke(
+  s: VectorBoardStroke,
+): { minX: number; minY: number; maxX: number; maxY: number } | null {
+  const pts = strokeToWorldPoints(s)
+  if (pts.length === 0) return null
+  let minX = Infinity
+  let maxX = -Infinity
+  let minY = Infinity
+  let maxY = -Infinity
+  for (const p of pts) {
+    minX = Math.min(minX, p[0])
+    maxX = Math.max(maxX, p[0])
+    minY = Math.min(minY, p[1])
+    maxY = Math.max(maxY, p[1])
+  }
+  if (!Number.isFinite(minX)) return null
+  return { minX, minY, maxX, maxY }
+}
+
 function distToSegment(
   px: number,
   py: number,
@@ -340,7 +454,28 @@ function pointInClosedStroke(
   if (s.kind === 'polygon' && s.points.length >= 3) {
     return pointInPolygon(nx, ny, s.points)
   }
+  if (s.kind === 'pen' && s.penClosed === true) {
+    if (s.penAnchors && s.penAnchors.length >= 3) {
+      const pts = samplePenAnchorsToPolyline(s.penAnchors, 48, true)
+      return pointInPolygon(nx, ny, pts)
+    }
+    if (s.points.length >= 3) {
+      return pointInPolygon(nx, ny, s.points)
+    }
+  }
   return false
+}
+
+function strokeHitAtNorm(
+  nx: number,
+  ny: number,
+  s: VectorBoardStroke,
+  threshold: number,
+): boolean {
+  const edge = distanceToStroke(nx, ny, s)
+  const halfW = s.strokeWidthN * 0.5
+  if (edge <= threshold + halfW) return true
+  return pointInClosedStroke(s, nx, ny)
 }
 
 /**
@@ -414,7 +549,7 @@ function strokeToWorldPoints(s: VectorBoardStroke): [number, number][] {
     return [s.points[0]!, s.points[1]!]
   }
   if (s.kind === 'pen' && s.penAnchors && s.penAnchors.length >= 2) {
-    return samplePenAnchorsToPolyline(s.penAnchors, 24)
+    return samplePenAnchorsToPolyline(s.penAnchors, 24, s.penClosed === true)
   }
   return s.points
 }
