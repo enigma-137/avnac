@@ -1,80 +1,91 @@
-import { useEffect, useId, useRef, useState } from 'react'
-import { useNavigate } from '@tanstack/react-router'
-import { ARTBOARD_PRESETS } from '../data/artboard-presets'
+import { useEffect, useId, useRef, useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
+import { usePostHog } from "posthog-js/react";
+import { ARTBOARD_PRESETS } from "../data/artboard-presets";
 
-const CANVAS_MIN = 100
-const CANVAS_MAX = 16000
+const CANVAS_MIN = 100;
+const CANVAS_MAX = 16000;
 
 type NewCanvasDialogProps = {
-  open: boolean
-  onClose: () => void
-}
+  open: boolean;
+  onClose: () => void;
+};
 
-export default function NewCanvasDialog({ open, onClose }: NewCanvasDialogProps) {
-  const navigate = useNavigate()
-  const titleId = useId()
-  const panelRef = useRef<HTMLDivElement>(null)
-  const [mode, setMode] = useState<'presets' | 'custom'>('presets')
-  const [customW, setCustomW] = useState('1920')
-  const [customH, setCustomH] = useState('1080')
-  const [customError, setCustomError] = useState<string | null>(null)
+export default function NewCanvasDialog({
+  open,
+  onClose,
+}: NewCanvasDialogProps) {
+  const navigate = useNavigate();
+  const posthog = usePostHog();
+  const titleId = useId();
+  const panelRef = useRef<HTMLDivElement>(null);
+  const [mode, setMode] = useState<"presets" | "custom">("presets");
+  const [customW, setCustomW] = useState("1920");
+  const [customH, setCustomH] = useState("1080");
+  const [customError, setCustomError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!open) return
-    setMode('presets')
-    setCustomError(null)
+    if (!open) return;
+    setMode("presets");
+    setCustomError(null);
     const t = window.setTimeout(() => {
-      panelRef.current?.querySelector<HTMLElement>('button')?.focus()
-    }, 0)
-    return () => window.clearTimeout(t)
-  }, [open])
+      panelRef.current?.querySelector<HTMLElement>("button")?.focus();
+    }, 0);
+    return () => window.clearTimeout(t);
+  }, [open]);
 
   useEffect(() => {
-    if (!open) return
+    if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault()
-        onClose()
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onClose();
       }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [open, onClose])
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
 
-  const goCreate = (w: number, h: number) => {
-    const W = Math.min(CANVAS_MAX, Math.max(CANVAS_MIN, Math.round(w)))
-    const H = Math.min(CANVAS_MAX, Math.max(CANVAS_MIN, Math.round(h)))
-    void navigate({ to: '/create', search: { w: W, h: H } })
-    onClose()
-  }
+  const goCreate = (w: number, h: number, presetLabel?: string) => {
+    const W = Math.min(CANVAS_MAX, Math.max(CANVAS_MIN, Math.round(w)));
+    const H = Math.min(CANVAS_MAX, Math.max(CANVAS_MIN, Math.round(h)));
+    posthog.capture("canvas_created", {
+      width: W,
+      height: H,
+      creation_mode: presetLabel ? "preset" : "custom",
+      preset_label: presetLabel ?? null,
+    });
+    void navigate({ to: "/create", search: { w: W, h: H } });
+    onClose();
+  };
 
   const submitCustom = () => {
-    const w = Number.parseInt(customW.replace(/\s/g, ''), 10)
-    const h = Number.parseInt(customH.replace(/\s/g, ''), 10)
+    const w = Number.parseInt(customW.replace(/\s/g, ""), 10);
+    const h = Number.parseInt(customH.replace(/\s/g, ""), 10);
     if (!Number.isFinite(w) || !Number.isFinite(h)) {
-      setCustomError('Enter width and height as numbers.')
-      return
+      setCustomError("Enter width and height as numbers.");
+      return;
     }
     if (w < CANVAS_MIN || h < CANVAS_MIN) {
-      setCustomError(`Minimum size is ${CANVAS_MIN}×${CANVAS_MIN}px.`)
-      return
+      setCustomError(`Minimum size is ${CANVAS_MIN}×${CANVAS_MIN}px.`);
+      return;
     }
     if (w > CANVAS_MAX || h > CANVAS_MAX) {
-      setCustomError(`Maximum size is ${CANVAS_MAX}×${CANVAS_MAX}px.`)
-      return
+      setCustomError(`Maximum size is ${CANVAS_MAX}×${CANVAS_MAX}px.`);
+      return;
     }
-    setCustomError(null)
-    goCreate(w, h)
-  }
+    setCustomError(null);
+    goCreate(w, h);
+  };
 
-  if (!open) return null
+  if (!open) return null;
 
   return (
     <div
       className="fixed inset-0 z-[200] flex items-center justify-center p-4 sm:p-6"
       role="presentation"
       onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose()
+        if (e.target === e.currentTarget) onClose();
       }}
     >
       <div
@@ -103,37 +114,37 @@ export default function NewCanvasDialog({ open, onClose }: NewCanvasDialogProps)
           <button
             type="button"
             className={[
-              'min-h-10 flex-1 rounded-full text-sm font-medium transition-colors',
-              mode === 'presets'
-                ? 'bg-[var(--surface)] text-[var(--text)]'
-                : 'text-[var(--text-muted)] hover:text-[var(--text)]',
-            ].join(' ')}
-            onClick={() => setMode('presets')}
+              "min-h-10 flex-1 rounded-full text-sm font-medium transition-colors",
+              mode === "presets"
+                ? "bg-[var(--surface)] text-[var(--text)]"
+                : "text-[var(--text-muted)] hover:text-[var(--text)]",
+            ].join(" ")}
+            onClick={() => setMode("presets")}
           >
             Presets
           </button>
           <button
             type="button"
             className={[
-              'min-h-10 flex-1 rounded-full text-sm font-medium transition-colors',
-              mode === 'custom'
-                ? 'bg-[var(--surface)] text-[var(--text)]'
-                : 'text-[var(--text-muted)] hover:text-[var(--text)]',
-            ].join(' ')}
-            onClick={() => setMode('custom')}
+              "min-h-10 flex-1 rounded-full text-sm font-medium transition-colors",
+              mode === "custom"
+                ? "bg-[var(--surface)] text-[var(--text)]"
+                : "text-[var(--text-muted)] hover:text-[var(--text)]",
+            ].join(" ")}
+            onClick={() => setMode("custom")}
           >
             Customize
           </button>
         </div>
 
-        {mode === 'presets' ? (
+        {mode === "presets" ? (
           <ul className="mt-5 max-h-[min(52vh,22rem)] list-none space-y-2 overflow-y-auto overscroll-contain p-0 sm:max-h-[min(48vh,24rem)]">
             {ARTBOARD_PRESETS.map((p) => (
               <li key={p.id}>
                 <button
                   type="button"
                   className="flex w-full items-center justify-between gap-3 rounded-xl border border-transparent bg-black/[0.03] px-4 py-3 text-left transition-colors hover:border-black/[0.1] hover:bg-black/[0.05]"
-                  onClick={() => goCreate(p.width, p.height)}
+                  onClick={() => goCreate(p.width, p.height, p.label)}
                 >
                   <span className="min-w-0 text-[15px] font-medium text-[var(--text)]">
                     {p.label}
@@ -207,5 +218,5 @@ export default function NewCanvasDialog({ open, onClose }: NewCanvasDialogProps)
         </div>
       </div>
     </div>
-  )
+  );
 }
