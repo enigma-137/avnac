@@ -2772,7 +2772,7 @@ export default function VectorBoardWorkspace({
                   className={[
                     'flex flex-col rounded-xl border px-2 py-1.5',
                     active
-                      ? 'border-[#8B3DFF]/40 bg-[#8B3DFF]/8'
+                      ? 'border-[var(--accent)]/60 bg-[var(--accent)]/15'
                       : 'border-transparent bg-white/80',
                   ].join(' ')}
                 >
