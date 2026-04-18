@@ -1,4 +1,12 @@
 import type { AvnacDocumentV1 } from './avnac-document'
+import type { VectorBoardDocument } from './avnac-vector-board-document'
+import {
+  clearAvnacVectorBoardStorage,
+  loadVectorBoardDocs,
+  loadVectorBoards,
+  saveVectorBoardDocs,
+  saveVectorBoards,
+} from './avnac-vector-boards-storage'
 
 const DB_NAME = 'avnac-editor'
 const DB_VERSION = 1
@@ -121,4 +129,45 @@ export async function idbSetDocumentName(
   const row = await idbGetEditorRecord(id)
   if (!row) return
   await idbPutDocument(id, row.document, { name })
+}
+
+export async function idbDeleteDocument(id: string): Promise<void> {
+  const db = await openDb()
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(STORE, 'readwrite')
+      tx.onerror = () => reject(tx.error ?? new Error('idb delete failed'))
+      tx.oncomplete = () => resolve()
+      tx.objectStore(STORE).delete(id)
+    })
+  } finally {
+    db.close()
+  }
+  clearAvnacVectorBoardStorage(id)
+}
+
+export async function idbDuplicateDocument(sourceId: string): Promise<string | null> {
+  const row = await idbGetEditorRecord(sourceId)
+  if (!row) return null
+  const newId = crypto.randomUUID()
+  const baseName = row.name?.trim() || 'Untitled'
+  const name = `${baseName} copy`
+  const docClone: AvnacDocumentV1 =
+    typeof structuredClone === 'function'
+      ? structuredClone(row.document)
+      : (JSON.parse(JSON.stringify(row.document)) as AvnacDocumentV1)
+  await idbPutDocument(newId, docClone, { name })
+
+  const boards = loadVectorBoards(sourceId)
+  const docs = loadVectorBoardDocs(sourceId)
+  if (boards.length > 0) {
+    saveVectorBoards(newId, JSON.parse(JSON.stringify(boards)) as typeof boards)
+  }
+  if (Object.keys(docs).length > 0) {
+    saveVectorBoardDocs(
+      newId,
+      JSON.parse(JSON.stringify(docs)) as Record<string, VectorBoardDocument>,
+    )
+  }
+  return newId
 }
