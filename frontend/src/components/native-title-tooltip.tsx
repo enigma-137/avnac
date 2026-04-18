@@ -57,16 +57,24 @@ export default function NativeTitleTooltip() {
 
     const hide = () => {
       clearShowTimer()
-      scheduledElRef.current = null
+      if (scheduledElRef.current) {
+        restoreTitle(scheduledElRef.current)
+        scheduledElRef.current = null
+      }
       restoreTitle(activeTargetRef.current)
       activeTargetRef.current = null
       setTip(null)
     }
 
-    const show = (el: Element, text: string) => {
-      if (!document.contains(el)) return
+    const stashTitle = (el: Element, text: string) => {
       if (!stashRef.current.has(el)) stashRef.current.set(el, text)
       el.removeAttribute('title')
+    }
+
+    const show = (el: Element) => {
+      if (!document.contains(el)) return
+      const text = stashRef.current.get(el)
+      if (!text) return
       activeTargetRef.current = el
       setTip(positionTip(el, text))
     }
@@ -81,11 +89,12 @@ export default function NativeTitleTooltip() {
         activeTargetRef.current = null
         setTip(null)
       }
+      stashTitle(el, text)
       scheduledElRef.current = el
       showTimerRef.current = setTimeout(() => {
         showTimerRef.current = null
         scheduledElRef.current = null
-        show(el, text)
+        show(el)
       }, SHOW_DELAY_MS)
     }
 
@@ -105,6 +114,7 @@ export default function NativeTitleTooltip() {
       if (scheduled) {
         if (!rel || !scheduled.contains(rel)) {
           clearShowTimer()
+          restoreTitle(scheduled)
           scheduledElRef.current = null
         }
       }
@@ -131,6 +141,7 @@ export default function NativeTitleTooltip() {
       if (scheduled) {
         if (!rel || !scheduled.contains(rel)) {
           clearShowTimer()
+          restoreTitle(scheduled)
           scheduledElRef.current = null
         }
       }
