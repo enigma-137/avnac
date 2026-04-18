@@ -80,6 +80,7 @@ import {
   setAvnacShapeMeta,
   type ArrowLineStyle,
   type ArrowPathType,
+  type AvnacShapeKind,
   type AvnacShapeMeta,
 } from '../lib/avnac-shape-meta'
 import {
@@ -128,7 +129,12 @@ import {
   migrateLegacyImageBlurFilters,
   readBlurPctFromFabricObject,
 } from '../lib/avnac-object-blur'
-import { ensureAvnacLayerId, renewAvnacLayerId } from '../lib/ensure-avnac-layer-id'
+import {
+  ensureAvnacLayerId,
+  getAvnacLayerName,
+  renewAvnacLayerId,
+  setAvnacLayerName,
+} from '../lib/ensure-avnac-layer-id'
 import { linearGradientForBox } from '../lib/fabric-linear-gradient'
 import { loadCanvasGoogleFontsAndRelayout } from '../lib/avnac-canvas-google-fonts'
 import { loadGoogleFontFamily } from '../lib/load-google-font'
@@ -196,6 +202,7 @@ const OBJECT_SERIAL_KEYS = [
   'avnacFill',
   'avnacStroke',
   'avnacLayerId',
+  'avnacLayerName',
   'avnacVectorBoardId',
 ] as const
 
@@ -299,17 +306,30 @@ function readTextFormat(obj: IText, fontSize: number): TextFormatToolbarValues {
   }
 }
 
+function avnacShapeKindLayerLabel(kind: AvnacShapeKind): string {
+  const labels: Record<AvnacShapeKind, string> = {
+    rect: 'Square',
+    ellipse: 'Ellipse',
+    polygon: 'Polygon',
+    star: 'Star',
+    line: 'Line',
+    arrow: 'Arrow',
+  }
+  return labels[kind]
+}
+
 function fabricObjectLabel(
   o: FabricObject,
   mod: typeof import('fabric'),
 ): string {
+  const custom = getAvnacLayerName(o)
+  if (custom) return custom
   if (mod.FabricImage && o instanceof mod.FabricImage) return 'Image'
   if (mod.IText && o instanceof mod.IText) {
-    const t = o.text?.trim() || 'Text'
-    return t.length > 24 ? `${t.slice(0, 24)}…` : t
+    return o.text?.trim() || 'Text'
   }
   const m = getAvnacShapeMeta(o)
-  if (m) return m.kind
+  if (m) return avnacShapeKindLayerLabel(m.kind)
   return o.type ?? 'Object'
 }
 
@@ -3526,6 +3546,20 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
     persistAfterMutation(c, o)
   }, [persistAfterMutation])
 
+  const onRenameLayer = useCallback(
+    (stackIndex: number, name: string) => {
+      const c = fabricCanvasRef.current
+      if (!c) return
+      const o = c.getObjects()[stackIndex]
+      if (!o) return
+      setAvnacLayerName(o, name)
+      c.requestRenderAll()
+      selectionTick()
+      persistAfterMutation(c, o)
+    },
+    [persistAfterMutation],
+  )
+
   const onLayerReorder = useCallback(
     (orderedLayerIds: string[]) => {
       const c = fabricCanvasRef.current
@@ -4037,6 +4071,7 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
         onBringForward={onLayerBringForward}
         onSendBackward={onLayerSendBackward}
         onReorder={onLayerReorder}
+        onRenameLayer={onRenameLayer}
       />
       <EditorUploadsPanel
         open={ready && editorSidebarPanel === 'uploads'}
