@@ -58,7 +58,7 @@ import {
 } from '../lib/fabric-line-arrow-controls'
 import {
   attachFabricHoverOutline,
-  EDITOR_ACCENT_PURPLE,
+  EDITOR_CANVAS_ACCENT,
   installFabricSelectionChrome,
 } from '../lib/fabric-selection-chrome'
 import { regularPolygonPoints, starPolygonPoints } from '../lib/avnac-shape-geometry'
@@ -165,6 +165,12 @@ import EditorFloatingSidebar, {
 import EditorLayersPanel, {
   type EditorLayerRow,
 } from './editor-layers-panel'
+import EditorAiPanel from './editor-ai-panel'
+import type {
+  AiDesignController,
+  AiObjectKind,
+  AiObjectSummary,
+} from '../lib/avnac-ai-controller'
 import EditorShortcutsModal from './editor-shortcuts-modal'
 import EditorUploadsPanel from './editor-uploads-panel'
 import EditorVectorBoardPanel from './editor-vector-board-panel'
@@ -2998,6 +3004,292 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
     [applyDoc, captureDoc, fitArtboardToViewport],
   )
 
+  const setBgValueRef = useRef(setBgValue)
+  setBgValueRef.current = setBgValue
+
+  const aiController = useMemo<AiDesignController>(() => {
+    const describeKind = (obj: FabricObject): AiObjectKind => {
+      const mod = fabricModRef.current
+      if (!mod) return 'other'
+      const anyObj = obj as FabricObject & {
+        avnacVectorBoardId?: string
+        avnacShape?: { kind?: string }
+      }
+      if (anyObj.avnacVectorBoardId) return 'vector-board'
+      if (mod.FabricImage && obj instanceof mod.FabricImage) return 'image'
+      if (mod.IText && obj instanceof mod.IText) return 'text'
+      if (mod.Textbox && obj instanceof mod.Textbox) return 'text'
+      if (mod.Line && obj instanceof mod.Line) return 'line'
+      if (mod.Rect && obj instanceof mod.Rect) return 'rect'
+      if (mod.Ellipse && obj instanceof mod.Ellipse) return 'ellipse'
+      if (mod.Group && obj instanceof mod.Group) {
+        if (anyObj.avnacShape?.kind === 'arrow') return 'arrow'
+        return 'group'
+      }
+      const k = anyObj.avnacShape?.kind
+      if (k === 'polygon') return 'polygon'
+      if (k === 'star') return 'star'
+      if (k === 'arrow') return 'arrow'
+      if (k === 'line') return 'line'
+      return 'other'
+    }
+
+    const findById = (id: string): FabricObject | null => {
+      const canvas = fabricCanvasRef.current
+      if (!canvas) return null
+      const objs = canvas.getObjects()
+      for (const o of objs) {
+        if ((o as FabricObject & { avnacLayerId?: string }).avnacLayerId === id)
+          return o
+      }
+      return null
+    }
+
+    const fillAsString = (f: unknown): string | null => {
+      if (typeof f === 'string') return f
+      return null
+    }
+
+    const placeObject = (
+      obj: FabricObject,
+      spec: { x?: number; y?: number; origin?: 'center' | 'top-left' },
+      fallbackCenter = false,
+    ) => {
+      const W = artboardWRef.current
+      const H = artboardHRef.current
+      const origin = spec.origin ?? (fallbackCenter ? 'center' : 'top-left')
+      const ox = origin === 'center' ? 'center' : 'left'
+      const oy = origin === 'center' ? 'center' : 'top'
+      const x = typeof spec.x === 'number' ? spec.x : origin === 'center' ? W / 2 : 0
+      const y = typeof spec.y === 'number' ? spec.y : origin === 'center' ? H / 2 : 0
+      obj.set({
+        originX: ox as 'left' | 'center' | 'right',
+        originY: oy as 'top' | 'center' | 'bottom',
+        left: x,
+        top: y,
+      })
+    }
+
+    return {
+      getCanvas() {
+        const canvas = fabricCanvasRef.current
+        if (!canvas) return null
+        const objects = canvas.getObjects()
+        const summaries: AiObjectSummary[] = objects.map((o) => {
+          const id =
+            (o as FabricObject & { avnacLayerId?: string }).avnacLayerId ??
+            ensureAvnacLayerId(o)
+          const bb = o.getBoundingRect()
+          const anyObj = o as FabricObject & { text?: string }
+          return {
+            id,
+            kind: describeKind(o),
+            label: o.type ?? 'object',
+            left: Math.round(bb.left),
+            top: Math.round(bb.top),
+            width: Math.round(bb.width),
+            height: Math.round(bb.height),
+            angle: Math.round((o.angle ?? 0) * 10) / 10,
+            fill: fillAsString(o.fill),
+            stroke: fillAsString(o.stroke),
+            text: typeof anyObj.text === 'string' ? anyObj.text : null,
+          }
+        })
+        const bgColorVal = (canvas.backgroundColor as unknown) ?? null
+        return {
+          width: artboardWRef.current,
+          height: artboardHRef.current,
+          background: typeof bgColorVal === 'string' ? bgColorVal : null,
+          objectCount: summaries.length,
+          objects: summaries,
+        }
+      },
+      addRectangle(spec) {
+        const canvas = fabricCanvasRef.current
+        const mod = fabricModRef.current
+        if (!canvas || !mod) return null
+        const r = new mod.Rect({
+          width: spec.width,
+          height: spec.height,
+          fill: spec.fill ?? '#262626',
+          stroke: spec.stroke,
+          strokeWidth: spec.strokeWidth ?? (spec.stroke ? 1 : 0),
+          rx: spec.cornerRadius ?? 0,
+          ry: spec.cornerRadius ?? 0,
+          angle: spec.rotation ?? 0,
+          opacity: spec.opacity ?? 1,
+        })
+        setAvnacShapeMeta(r, { kind: 'rect' })
+        placeObject(r, spec)
+        const id = ensureAvnacLayerId(r)
+        canvas.add(r)
+        canvas.requestRenderAll()
+        return { id }
+      },
+      addEllipse(spec) {
+        const canvas = fabricCanvasRef.current
+        const mod = fabricModRef.current
+        if (!canvas || !mod) return null
+        const e = new mod.Ellipse({
+          rx: spec.width / 2,
+          ry: spec.height / 2,
+          fill: spec.fill ?? '#262626',
+          stroke: spec.stroke,
+          strokeWidth: spec.strokeWidth ?? (spec.stroke ? 1 : 0),
+          angle: spec.rotation ?? 0,
+          opacity: spec.opacity ?? 1,
+        })
+        setAvnacShapeMeta(e, { kind: 'ellipse' })
+        placeObject(e, spec)
+        const id = ensureAvnacLayerId(e)
+        canvas.add(e)
+        canvas.requestRenderAll()
+        return { id }
+      },
+      addText(spec) {
+        const canvas = fabricCanvasRef.current
+        const mod = fabricModRef.current
+        if (!canvas || !mod) return null
+        const Ctor = mod.Textbox ?? mod.IText
+        if (!Ctor) return null
+        const t = new Ctor(spec.text, {
+          fontSize: spec.fontSize ?? 48,
+          fontFamily: spec.fontFamily ?? 'Inter',
+          fontWeight: spec.fontWeight ?? 'normal',
+          fontStyle: spec.fontStyle ?? 'normal',
+          fill: spec.fill ?? '#111111',
+          textAlign: spec.textAlign ?? 'left',
+          width: spec.width,
+          angle: spec.rotation ?? 0,
+          opacity: spec.opacity ?? 1,
+        })
+        placeObject(t, spec)
+        const id = ensureAvnacLayerId(t)
+        canvas.add(t)
+        canvas.requestRenderAll()
+        return { id }
+      },
+      addLine(spec) {
+        const canvas = fabricCanvasRef.current
+        const mod = fabricModRef.current
+        if (!canvas || !mod?.Line) return null
+        const l = new mod.Line([spec.x1, spec.y1, spec.x2, spec.y2], {
+          stroke: spec.stroke ?? '#111111',
+          strokeWidth: spec.strokeWidth ?? 2,
+          opacity: spec.opacity ?? 1,
+        })
+        const id = ensureAvnacLayerId(l)
+        canvas.add(l)
+        canvas.requestRenderAll()
+        return { id }
+      },
+      async addImageFromUrl(spec) {
+        const canvas = fabricCanvasRef.current
+        const mod = fabricModRef.current
+        if (!canvas || !mod?.FabricImage) return null
+        try {
+          const img = await mod.FabricImage.fromURL(spec.url, {
+            crossOrigin: 'anonymous',
+          })
+          const natW = img.width ?? 1
+          const natH = img.height ?? 1
+          const targetW = spec.width ?? natW
+          const targetH = spec.height ?? natH
+          img.set({
+            scaleX: targetW / natW,
+            scaleY: targetH / natH,
+            angle: spec.rotation ?? 0,
+            opacity: spec.opacity ?? 1,
+          })
+          placeObject(img as unknown as FabricObject, spec, true)
+          const id = ensureAvnacLayerId(img as unknown as FabricObject)
+          canvas.add(img)
+          canvas.requestRenderAll()
+          return { id }
+        } catch (err) {
+          console.error('AI addImageFromUrl failed', err)
+          return null
+        }
+      },
+      updateObject(id, patch) {
+        const canvas = fabricCanvasRef.current
+        if (!canvas) return false
+        const obj = findById(id)
+        if (!obj) return false
+        const next: Record<string, unknown> = {}
+        for (const key of [
+          'left',
+          'top',
+          'width',
+          'height',
+          'scaleX',
+          'scaleY',
+          'angle',
+          'fill',
+          'stroke',
+          'strokeWidth',
+          'opacity',
+        ] as const) {
+          const v = patch[key]
+          if (typeof v !== 'undefined') next[key] = v
+        }
+        obj.set(next as Partial<FabricObject>)
+        if (typeof patch.text === 'string') {
+          const anyObj = obj as FabricObject & { text?: string; set: FabricObject['set'] }
+          anyObj.set({ text: patch.text } as Partial<FabricObject>)
+        }
+        if (typeof patch.fontSize === 'number') {
+          obj.set({ fontSize: patch.fontSize } as Partial<FabricObject>)
+        }
+        obj.setCoords()
+        canvas.fire('object:modified', { target: obj })
+        canvas.requestRenderAll()
+        return true
+      },
+      deleteObject(id) {
+        const canvas = fabricCanvasRef.current
+        if (!canvas) return false
+        const obj = findById(id)
+        if (!obj) return false
+        canvas.remove(obj)
+        canvas.requestRenderAll()
+        return true
+      },
+      selectObjects(ids) {
+        const canvas = fabricCanvasRef.current
+        const mod = fabricModRef.current
+        if (!canvas || !mod) return 0
+        const targets = ids
+          .map((id) => findById(id))
+          .filter((o): o is FabricObject => Boolean(o))
+        if (targets.length === 0) {
+          canvas.discardActiveObject()
+          canvas.requestRenderAll()
+          return 0
+        }
+        if (targets.length === 1) {
+          canvas.setActiveObject(targets[0])
+        } else if (mod.ActiveSelection) {
+          const sel = new mod.ActiveSelection(targets, { canvas })
+          canvas.setActiveObject(sel)
+        }
+        canvas.requestRenderAll()
+        return targets.length
+      },
+      setBackgroundColor(color) {
+        setBgValueRef.current({ type: 'solid', color })
+      },
+      clearCanvas() {
+        const canvas = fabricCanvasRef.current
+        if (!canvas) return 0
+        const objs = canvas.getObjects().slice()
+        for (const o of objs) canvas.remove(o)
+        canvas.requestRenderAll()
+        return objs.length
+      },
+    }
+  }, [])
+
   useImperativeHandle(
     ref,
     () => ({ exportPng, saveDocument, loadDocument }),
@@ -3456,7 +3748,7 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
                 lineHeight: 0,
                 boxShadow:
                   artboardEmptyHovered && !hasObjectSelected
-                    ? `0 4px 24px rgba(0,0,0,0.08), 0 0 0 2px ${EDITOR_ACCENT_PURPLE}`
+                    ? `0 4px 24px rgba(0,0,0,0.08), 0 0 0 2px ${EDITOR_CANVAS_ACCENT}`
                     : '0 4px 24px rgba(0,0,0,0.08)',
               }}
             >
@@ -3473,7 +3765,7 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
                         className="absolute bottom-0 top-0 w-px -translate-x-1/2"
                         style={{
                           left: `${(g.pos / artboardW) * 100}%`,
-                          backgroundColor: EDITOR_ACCENT_PURPLE,
+                          backgroundColor: EDITOR_CANVAS_ACCENT,
                         }}
                       />
                     ) : (
@@ -3482,7 +3774,7 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
                         className="absolute left-0 right-0 h-px -translate-y-1/2"
                         style={{
                           top: `${(g.pos / artboardH) * 100}%`,
-                          backgroundColor: EDITOR_ACCENT_PURPLE,
+                          backgroundColor: EDITOR_CANVAS_ACCENT,
                         }}
                       />
                     ),
@@ -3643,6 +3935,11 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
         onCreateNew={createVectorBoard}
         onOpenBoard={openVectorBoardWorkspace}
         onDeleteBoard={deleteVectorBoard}
+      />
+      <EditorAiPanel
+        open={ready && editorSidebarPanel === 'ai'}
+        onClose={() => setEditorSidebarPanel(null)}
+        controller={aiController}
       />
       {vectorWorkspaceId ? (
         <VectorBoardWorkspace
