@@ -153,8 +153,8 @@ function FilesPage() {
       <div className="hero-grid" aria-hidden="true" />
 
       <div className="relative z-[1] flex flex-1 flex-col">
-        <div className="pointer-events-none fixed inset-x-0 top-0 z-[200] px-5 pt-4 sm:px-8 sm:pt-5">
-          <div className="mx-auto flex max-w-6xl justify-end pointer-events-auto">
+        <div className="pointer-events-none fixed inset-x-0 top-0 z-[200] pt-4 sm:pt-5">
+          <div className="mx-auto flex w-full max-w-6xl justify-end px-5 sm:px-8 pointer-events-auto">
             <button
               type="button"
               className="inline-flex min-h-11 shrink-0 cursor-pointer items-center justify-center rounded-full border-0 bg-[var(--text)] px-6 py-2.5 text-[15px] font-medium text-white transition hover:bg-[#262626] sm:min-h-12 sm:px-8 sm:py-3 sm:text-[1.0625rem]"
@@ -165,11 +165,8 @@ function FilesPage() {
           </div>
         </div>
 
-        <div
-          className="shrink-0 px-5 pt-4 sm:px-8 sm:pt-5"
-          aria-hidden
-        >
-          <div className="mx-auto flex h-11 max-w-6xl justify-end sm:h-12" />
+        <div className="shrink-0 pt-4 sm:pt-5" aria-hidden>
+          <div className="mx-auto flex h-11 w-full max-w-6xl justify-end px-5 sm:h-12 sm:px-8" />
         </div>
 
         <div
