@@ -2,6 +2,7 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import {
   AiMagicIcon,
   Cancel01Icon,
+  Image01Icon,
   SentIcon,
   SparklesIcon,
   ToolsIcon,
@@ -11,6 +12,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type ChangeEvent,
   type FormEvent,
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
@@ -68,6 +70,13 @@ export default function EditorAiPanel({ open, onClose, controller }: Props) {
     () => buildAvnacTamboTools(controllerRef),
     [],
   );
+  const magicContextHelpers = useMemo(
+    () => ({
+      avnac_canvas: () =>
+        "You control a design canvas in Avnac. For Unsplash stock photos: call search_unsplash with keywords (or omit query for popular), read results, pick the best match, then add_unsplash_photo with that row's image_url, download_location, width, and height. For other image URLs or data URLs use add_image. Use describe_canvas when you need artboard size and existing layers.",
+    }),
+    [],
+  );
   const [magicQuickPrompts] = useState(() => pickMagicQuickPrompts());
 
   if (!open) return null;
@@ -111,7 +120,12 @@ export default function EditorAiPanel({ open, onClose, controller }: Props) {
 
       {apiKey ? (
         <div className="flex min-h-0 flex-1 flex-col">
-          <TamboProvider apiKey={apiKey} userKey={userKey} tools={tools}>
+          <TamboProvider
+            apiKey={apiKey}
+            userKey={userKey}
+            tools={tools}
+            contextHelpers={magicContextHelpers}
+          >
             <MagicChat quickPrompts={magicQuickPrompts} />
           </TamboProvider>
         </div>
@@ -162,6 +176,25 @@ type AnyContentItem = { type?: string; text?: string; name?: string } & Record<
   unknown
 >;
 
+function getMessageImageDataUrl(c: unknown): string | null {
+  if (!c || typeof c !== "object") return null;
+  const o = c as Record<string, unknown>;
+  if (o.type !== "resource") return null;
+  const resource = o.resource as Record<string, unknown> | undefined;
+  if (!resource) return null;
+  const mimeType = resource.mimeType;
+  const blob = resource.blob;
+  if (
+    typeof mimeType !== "string" ||
+    !mimeType.startsWith("image/") ||
+    typeof blob !== "string" ||
+    blob.length === 0
+  ) {
+    return null;
+  }
+  return `data:${mimeType};base64,${blob}`;
+}
+
 type MessageLike = {
   id: string;
   role?: string;
@@ -188,6 +221,13 @@ function isToolResultOnlyUserMessage(m: ReactTamboThreadMessage): boolean {
   return m.content.every((c) => c.type === "tool_result");
 }
 
+/**
+ * One assistant *message* from the stream, plus any tool-result user messages that
+ * belong to that step. We intentionally do not merge consecutive assistant messages:
+ * multi-step runs (tools → follow-up text) use separate assistant rows, and merging
+ * all assistants together can glue a later user turn onto the previous bubble when
+ * ordering or optimistic user rows are slightly off.
+ */
 function groupMessagesForDisplay(
   messages: ReactTamboThreadMessage[],
 ): MessageLike[] {
@@ -213,40 +253,49 @@ function groupMessagesForDisplay(
       i++;
       continue;
     }
-    const run: ReactTamboThreadMessage[] = [];
-    while (i < messages.length) {
-      const cur = messages[i]!;
-      if (cur.role === "assistant") {
-        run.push(cur);
+    if (m.role === "assistant") {
+      const run: ReactTamboThreadMessage[] = [m];
+      i++;
+      while (i < messages.length && isToolResultOnlyUserMessage(messages[i]!)) {
+        run.push(messages[i]!);
         i++;
-        continue;
       }
-      if (isToolResultOnlyUserMessage(cur)) {
-        run.push(cur);
-        i++;
-        continue;
-      }
-      break;
+      const merged = run.flatMap((x) => x.content as unknown[]);
+      out.push({
+        id: run.map((x) => x.id).join("\u0001"),
+        role: "assistant",
+        content: orderAssistantContentBlocks(merged),
+      });
+      continue;
     }
-    if (run.length === 0) {
+    if (isToolResultOnlyUserMessage(m)) {
+      out.push({
+        id: m.id,
+        role: "assistant",
+        content: orderAssistantContentBlocks(m.content as unknown[]),
+      });
       i++;
       continue;
     }
-    const merged = run.flatMap((x) => x.content as unknown[]);
-    out.push({
-      id: run.map((x) => x.id).join("\u0001"),
-      role: "assistant",
-      content: orderAssistantContentBlocks(merged),
-    });
+    i++;
   }
   return out;
 }
 
 function MagicChat({ quickPrompts }: { quickPrompts: string[] }) {
   const { messages, isStreaming, isWaiting } = useTambo();
-  const { value, setValue, submit, isPending } = useTamboThreadInput();
+  const {
+    value,
+    setValue,
+    submit,
+    isPending,
+    images: stagedImages,
+    addImages,
+    removeImage,
+  } = useTamboThreadInput();
   const [error, setError] = useState<string | null>(null);
   const scrollerRef = useRef<HTMLDivElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
   const posthog = usePostHog();
 
   const displayMessages = useMemo(
@@ -262,10 +311,13 @@ function MagicChat({ quickPrompts }: { quickPrompts: string[] }) {
 
   const onSubmit = async (e?: FormEvent) => {
     e?.preventDefault();
-    if (!value.trim() || isPending || isStreaming) return;
+    const hasText = value.trim().length > 0;
+    if ((!hasText && stagedImages.length === 0) || isPending || isStreaming)
+      return;
     setError(null);
     posthog.capture("ai_prompt_submitted", {
       prompt_length: value.trim().length,
+      image_count: stagedImages.length,
     });
     try {
       await submit();
@@ -273,6 +325,19 @@ function MagicChat({ quickPrompts }: { quickPrompts: string[] }) {
       posthog.captureException(err);
       setError(err instanceof Error ? err.message : "Something went wrong.");
     }
+  };
+
+  const onImageInputChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    e.target.value = "";
+    if (!files?.length) return;
+    const list = Array.from(files).filter((f) => f.type.startsWith("image/"));
+    if (list.length === 0) return;
+    void addImages(list).catch((err) => {
+      setError(
+        err instanceof Error ? err.message : "Could not add those images.",
+      );
+    });
   };
 
   const onKeyDown = (e: ReactKeyboardEvent<HTMLTextAreaElement>) => {
@@ -284,6 +349,8 @@ function MagicChat({ quickPrompts }: { quickPrompts: string[] }) {
 
   const showEmpty = messages.length === 0 && !isWaiting && !isStreaming;
   const busy = isPending || isStreaming || isWaiting;
+  const canSend =
+    (value.trim().length > 0 || stagedImages.length > 0) && !busy;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -319,6 +386,46 @@ function MagicChat({ quickPrompts }: { quickPrompts: string[] }) {
         onSubmit={onSubmit}
         className="mt-auto flex shrink-0 flex-col gap-2 border-t border-black/[0.06] px-3 pt-2 pb-1.5"
       >
+        <input
+          ref={imageInputRef}
+          type="file"
+          accept="image/*"
+          multiple
+          className="sr-only"
+          tabIndex={-1}
+          aria-hidden
+          onChange={onImageInputChange}
+        />
+        {stagedImages.length > 0 ? (
+          <div className="flex flex-wrap gap-2">
+            {stagedImages.map((img) => (
+              <div
+                key={img.id}
+                className="relative h-14 w-14 shrink-0 overflow-hidden rounded-xl border border-black/[0.08] bg-[var(--surface-subtle)]"
+              >
+                <img
+                  src={img.dataUrl}
+                  alt=""
+                  className="h-full w-full object-cover"
+                />
+                <button
+                  type="button"
+                  className="absolute inset-0 flex items-start justify-end p-0.5"
+                  onClick={() => removeImage(img.id)}
+                  aria-label="Remove attached image"
+                >
+                  <span className="flex h-5 w-5 items-center justify-center rounded-md bg-black/55 text-white shadow-sm">
+                    <HugeiconsIcon
+                      icon={Cancel01Icon}
+                      size={12}
+                      strokeWidth={2}
+                    />
+                  </span>
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : null}
         <textarea
           value={value}
           onChange={(e) => setValue(e.target.value)}
@@ -327,13 +434,29 @@ function MagicChat({ quickPrompts }: { quickPrompts: string[] }) {
           rows={2}
           className="w-full resize-none rounded-xl border border-black/[0.08] bg-white px-3 py-2 text-sm text-neutral-800 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-[#8B3DFF]/25"
         />
-        <div className="flex items-center justify-between">
-          <span className="text-[11px] text-neutral-500">
-            Enter to send · Shift+Enter for newline
-          </span>
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-2">
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => imageInputRef.current?.click()}
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-neutral-600 hover:bg-black/[0.06] disabled:cursor-not-allowed disabled:opacity-50"
+              aria-label="Attach images"
+              title="Attach images"
+            >
+              <HugeiconsIcon
+                icon={Image01Icon}
+                size={18}
+                strokeWidth={1.75}
+              />
+            </button>
+            <span className="text-[11px] text-neutral-500">
+              Enter to send · Shift+Enter for newline
+            </span>
+          </div>
           <button
             type="submit"
-            disabled={busy || !value.trim()}
+            disabled={!canSend}
             className="avnac-ai-tile flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-[12.5px] font-semibold disabled:cursor-not-allowed disabled:opacity-60"
           >
             <HugeiconsIcon
@@ -481,6 +604,9 @@ function MessageBubble({ message }: { message: MessageLike }) {
   const toolResults = items.filter((c) => c.type === "tool_result");
 
   const text = textParts.map((t) => t.text).join("\n\n");
+  const imageUrls = items
+    .map((c) => getMessageImageDataUrl(c))
+    .filter((u): u is string => u != null);
 
   const toolCount = toolCalls.length;
   const toolResultCount = toolResults.length;
@@ -497,7 +623,7 @@ function MessageBubble({ message }: { message: MessageLike }) {
   );
 
   const showToolActivity = toolCount > 0 || toolResultCount > 0;
-  if (!text && !showToolActivity) return null;
+  if (!text && !showToolActivity && imageUrls.length === 0) return null;
 
   const toolLabel =
     toolCount === 1
@@ -526,6 +652,23 @@ function MessageBubble({ message }: { message: MessageLike }) {
             className="avnac-ai-accent"
           />
           <span>{toolLabel}</span>
+        </div>
+      ) : null}
+      {imageUrls.length > 0 ? (
+        <div
+          className={[
+            "flex max-w-[85%] flex-wrap gap-1.5",
+            isUser ? "justify-end self-end" : "justify-start self-start",
+          ].join(" ")}
+        >
+          {imageUrls.map((src, i) => (
+            <img
+              key={i}
+              src={src}
+              alt=""
+              className="max-h-40 max-w-[min(100%,220px)] rounded-2xl border border-black/[0.08] bg-[var(--surface-subtle)] object-contain"
+            />
+          ))}
         </div>
       ) : null}
       {text ? (
