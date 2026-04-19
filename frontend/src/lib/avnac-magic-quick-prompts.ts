@@ -40,6 +40,8 @@ export const MAGIC_QUICK_PROMPTS_POOL: string[] = [
   'Create a soft pastel baby announcement card: name, birth date, tiny stars or moon.',
   'Design a beer can label: brewery name, style, ABV, hop illustration silhouette.',
   'Make a blackout poetry style graphic: redacted newspaper blocks with one visible poem line.',
+  'Search Unsplash for a photo that fits this layout, pick the best match, and place it on the artboard.',
+  'Find an Unsplash image of a mountain landscape at golden hour and add it centered behind the headline.',
 ]
 
 const DEFAULT_SHOWN = 4
