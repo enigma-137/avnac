@@ -185,6 +185,7 @@ import type {
 import EditorShortcutsModal from './editor-shortcuts-modal'
 import EditorUploadsPanel from './editor-uploads-panel'
 import EditorAppsPanel from './editor-apps-panel'
+import EditorImagesPanel from './editor-images-panel'
 import EditorVectorBoardPanel from './editor-vector-board-panel'
 import VectorBoardWorkspace from './vector-board-workspace'
 
@@ -4118,6 +4119,11 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
       <EditorUploadsPanel
         open={ready && editorSidebarPanel === 'uploads'}
         onClose={() => setEditorSidebarPanel(null)}
+      />
+      <EditorImagesPanel
+        open={ready && editorSidebarPanel === 'images'}
+        onClose={() => setEditorSidebarPanel(null)}
+        controller={aiController}
       />
       <EditorVectorBoardPanel
         open={ready && editorSidebarPanel === 'vector-board'}
