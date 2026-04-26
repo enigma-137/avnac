@@ -55,3 +55,26 @@ const floatingToolbarPopoverSurface =
 export const floatingToolbarPopoverMenuClass = floatingToolbarPopoverSurface
 
 export const floatingToolbarPopoverClass = `${floatingToolbarPopoverSurface} overflow-hidden`
+
+export const SidebarPanelShell = forwardRef<HTMLDivElement, ShellProps>(
+  function SidebarPanelShell(
+    { children, className = '', role, 'aria-label': ariaLabel },
+    ref,
+  ) {
+    return (
+      <div
+        ref={ref}
+        role={role}
+        aria-label={ariaLabel}
+        className={[
+          'pointer-events-auto fixed left-[calc(5.75rem+0.5rem)] top-[calc(0.75rem+2.5rem+0.75rem+1px+0.75rem)] sm:top-[calc(0.875rem+2.5rem+0.875rem+1px+0.75rem)] max-h-[calc(100vh-8rem)] z-[60] flex h-fit w-72 flex-col overflow-hidden border border-black/10 bg-white shadow-xl',
+          className,
+        ]
+          .filter(Boolean)
+          .join(' ')}
+      >
+        {children}
+      </div>
+    )
+  },
+)

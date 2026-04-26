@@ -180,6 +180,7 @@ import {
 import ImageCropModal, {
   type ImageCropModalApplyPayload,
 } from './image-crop-modal'
+import ImageEffectsToolbar from './image-effects-toolbar'
 import { getAvnacLocked, setAvnacLocked } from '../lib/avnac-object-lock'
 import type { ExportPngOptions } from './editor-export-menu'
 import EditorFloatingSidebar, {
@@ -509,6 +510,7 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
     radius: number
     max: number
   } | null>(null)
+  const [imageEffectsOpen, setImageEffectsOpen] = useState(false)
   const [imageCropOpen, setImageCropOpen] = useState(false)
   const [imageCropSrc, setImageCropSrc] = useState('')
   const [imageCropInitial, setImageCropInitial] = useState({
@@ -4069,6 +4071,25 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
                         ? 'pointer-events-none opacity-40'
                         : '',
                     ].join(' ')}
+                    aria-label="Edit image"
+                    title="Edit image (effects, background removal)"
+                    onClick={() => setImageEffectsOpen((o) => !o)}
+                  >
+                    <HugeiconsIcon
+                      icon={Image01Icon}
+                      size={20}
+                      strokeWidth={1.75}
+                    />
+                  </button>
+                  <button
+                    type="button"
+                    disabled={elementToolbarLockedDisplay}
+                    className={[
+                      floatingToolbarIconButton(false),
+                      elementToolbarLockedDisplay
+                        ? 'pointer-events-none opacity-40'
+                        : '',
+                    ].join(' ')}
                     aria-label="Crop image"
                     title="Crop image"
                     onClick={openImageCropModal}
@@ -4091,6 +4112,18 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
               {selectionEffectsFooterSlot}
             </div>
           </FloatingToolbarShell>
+        ) : null}
+        {ready && imageEffectsOpen && imageCornerToolbar && !elementToolbarLockedDisplay ? (
+          <ImageEffectsToolbar
+            image={fabricCanvasRef.current?.getActiveObject() as FabricImage}
+            fabricMod={fabricModRef.current}
+            canvas={fabricCanvasRef.current}
+            onApply={() => {
+              syncImageCornerToolbar()
+              selectionTick()
+            }}
+            onClose={() => setImageEffectsOpen(false)}
+          />
         ) : null}
         {ready &&
         !textToolbarValues &&
