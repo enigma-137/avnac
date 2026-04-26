@@ -121,10 +121,10 @@ export default function ImageEffectsToolbar({
       } else if (filter.type === 'Contrast') {
         foundContrast = Math.round(filter.contrast * 100 + 100)
       } else if (filter.type === 'ColorMatrix' && filter.matrix) {
-        // Simple heuristic: if it's our grayscale matrix, set grayscale to 100
-        // Our matrix starts with [0.2126, 0.7152, 0.0722, ...]
-        if (filter.matrix[0] === 0.2126 && filter.matrix[1] === 0.7152) {
-          foundGrayscale = 100
+        // Detect grayscale ratio from matrix[1] which is 0.7152 * ratio
+        const ratio = filter.matrix[1] / 0.7152
+        if (ratio > 0 && ratio <= 1.01) {
+          foundGrayscale = Math.round(ratio * 100)
         }
       }
     })

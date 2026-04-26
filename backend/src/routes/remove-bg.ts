@@ -1,6 +1,28 @@
 import { Elysia, t } from "elysia";
 import { env } from "../config/env";
 import { HttpError } from "../lib/http";
+import { auth } from "../auth";
+
+const REMOVE_BG_LIMIT = 5; // 5 requests per minute per user
+const REMOVE_BG_WINDOW = 60 * 1000;
+const usageMap = new Map<string, { count: number; reset: number }>();
+
+function checkRateLimit(userId: string) {
+  const now = Date.now();
+  const usage = usageMap.get(userId);
+
+  if (!usage || now > usage.reset) {
+    usageMap.set(userId, { count: 1, reset: now + REMOVE_BG_WINDOW });
+    return true;
+  }
+
+  if (usage.count >= REMOVE_BG_LIMIT) {
+    return false;
+  }
+
+  usage.count++;
+  return true;
+}
 
 function removeBgKey(): string {
   const k = env.REMOVE_BG_API_KEY;
@@ -16,7 +38,19 @@ function removeBgKey(): string {
 export const removeBgRoutes = new Elysia({ prefix: "/remove-bg" })
   .post(
     "/",
-    async ({ body, set }) => {
+    async ({ body, set, request }) => {
+      const authSession = await auth.api.getSession({
+        headers: request.headers,
+      });
+
+      if (!authSession) {
+        throw new HttpError(401, "Authentication required");
+      }
+
+      if (!checkRateLimit(authSession.user.id)) {
+        throw new HttpError(429, "Too many requests. Please try again later.");
+      }
+
       const key = removeBgKey();
       
       const formData = new FormData();
