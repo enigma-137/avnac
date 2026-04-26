@@ -1,4 +1,8 @@
 import { forwardRef, type ReactNode } from 'react'
+import {
+  editorSidebarPanelLeftClass,
+  editorSidebarPanelTopClass,
+} from '../lib/editor-sidebar-panel-layout'
 
 const shellClass =
   'pointer-events-auto z-10 inline-flex max-w-[min(100vw-2rem,720px)] items-stretch overflow-visible rounded-full border border-black/[0.08] bg-white/90 shadow-[0_4px_20px_rgba(0,0,0,0.08)] backdrop-blur-md'
@@ -67,7 +71,9 @@ export const SidebarPanelShell = forwardRef<HTMLDivElement, ShellProps>(
         role={role}
         aria-label={ariaLabel}
         className={[
-          'pointer-events-auto fixed left-[calc(5.75rem+0.5rem)] top-[calc(0.75rem+2.5rem+0.75rem+1px+0.75rem)] sm:top-[calc(0.875rem+2.5rem+0.875rem+1px+0.75rem)] max-h-[calc(100vh-8rem)] z-[60] flex h-fit w-72 flex-col overflow-hidden border border-black/10 bg-white shadow-xl',
+          'pointer-events-auto fixed max-h-[calc(100vh-8rem)] z-[60] flex h-fit w-72 flex-col overflow-hidden border border-black/10 bg-white shadow-xl',
+          editorSidebarPanelLeftClass,
+          editorSidebarPanelTopClass,
           className,
         ]
           .filter(Boolean)

@@ -1,4 +1,5 @@
 import { HugeiconsIcon } from '@hugeicons/react'
+import { getPublicApiBase } from '../lib/public-api-base'
 import {
   MagicWand02FreeIcons,
   Cancel01Icon,
@@ -33,7 +34,6 @@ export default function ImageEffectsToolbar({
   const [contrast, setContrast] = useState(100)
   const [grayscale, setGrayscale] = useState(0)
   const [backgroundRemoving, setBackgroundRemoving] = useState(false)
-
   const applyFilters = useCallback(() => {
     if (!canvas || !fabricMod || !image) return
 
@@ -95,10 +95,45 @@ export default function ImageEffectsToolbar({
       }
     }
 
-    image.filters = filters
+    const otherFilters = (image.filters || []).filter((f: any) => {
+      const type = f.type
+      return type !== 'Saturation' && type !== 'Brightness' && type !== 'Contrast' && type !== 'ColorMatrix'
+    })
+
+    image.filters = [...otherFilters, ...filters]
     image.applyFilters()
     canvas.requestRenderAll()
   }, [canvas, fabricMod, image, saturation, brightness, contrast, grayscale])
+
+  useEffect(() => {
+    if (!image || !image.filters) return
+
+    let foundSaturation = 100
+    let foundBrightness = 100
+    let foundContrast = 100
+    let foundGrayscale = 0
+
+    image.filters.forEach((filter: any) => {
+      if (filter.type === 'Saturation') {
+        foundSaturation = Math.round(filter.saturation * 100 + 100)
+      } else if (filter.type === 'Brightness') {
+        foundBrightness = Math.round(filter.brightness * 100 + 100)
+      } else if (filter.type === 'Contrast') {
+        foundContrast = Math.round(filter.contrast * 100 + 100)
+      } else if (filter.type === 'ColorMatrix' && filter.matrix) {
+        // Simple heuristic: if it's our grayscale matrix, set grayscale to 100
+        // Our matrix starts with [0.2126, 0.7152, 0.0722, ...]
+        if (filter.matrix[0] === 0.2126 && filter.matrix[1] === 0.7152) {
+          foundGrayscale = 100
+        }
+      }
+    })
+
+    setSaturation(foundSaturation)
+    setBrightness(foundBrightness)
+    setContrast(foundContrast)
+    setGrayscale(foundGrayscale)
+  }, [image])
 
   useEffect(() => {
     applyFilters()
@@ -107,6 +142,7 @@ export default function ImageEffectsToolbar({
   const handleRemoveBackground = useCallback(async () => {
     if (backgroundRemoving) return
 
+    let url: string | null = null
     try {
       setBackgroundRemoving(true)
 
@@ -121,26 +157,20 @@ export default function ImageEffectsToolbar({
       formData.append('image_file', imgBlob)
       formData.append('size', 'auto')
 
-      const apiKey = import.meta.env.VITE_REMOVE_BG_API_KEY
-      if (!apiKey) {
-        throw new Error('VITE_REMOVE_BG_API_KEY is not configured')
-      }
-
-      const response = await fetch('https://api.remove.bg/v1.0/removebg', {
+      const urlBase = getPublicApiBase()
+      const response = await fetch(`${urlBase}/remove-bg/`, {
         method: 'POST',
-        headers: {
-          'X-Api-Key': apiKey,
-        },
+        credentials: 'include',
         body: formData,
       })
 
       if (!response.ok) {
-        const errorText = await response.text()
-        throw new Error(`API request failed: ${response.status} - ${errorText}`)
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.error || `API request failed: ${response.status}`)
       }
 
       const resultBlob = await response.blob()
-      const url = URL.createObjectURL(resultBlob)
+      url = URL.createObjectURL(resultBlob)
 
       const newImage = await fabricMod.FabricImage.fromURL(url, {
         crossOrigin: 'anonymous',
@@ -183,12 +213,14 @@ export default function ImageEffectsToolbar({
       canvas.setActiveObject(newImage)
       canvas.requestRenderAll()
 
-      URL.revokeObjectURL(url)
       onApply?.()
     } catch (error) {
       console.error('Background removal failed:', error)
-      alert(`Background removal failed: ${error}`)
+      alert(`Background removal failed: ${error instanceof Error ? error.message : error}`)
     } finally {
+      if (url) {
+        URL.revokeObjectURL(url)
+      }
       setBackgroundRemoving(false)
     }
   }, [image, fabricMod, canvas, backgroundRemoving, onApply])

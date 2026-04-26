@@ -4115,12 +4115,18 @@ const FabricEditor = forwardRef<FabricEditorHandle, FabricEditorProps>(
         ) : null}
         {ready && imageEffectsOpen && imageCornerToolbar && !elementToolbarLockedDisplay ? (
           <ImageEffectsToolbar
-            image={fabricCanvasRef.current?.getActiveObject() as FabricImage}
+            image={
+              fabricCanvasRef.current?.getActiveObject() as import('fabric').FabricImage
+            }
             fabricMod={fabricModRef.current}
             canvas={fabricCanvasRef.current}
             onApply={() => {
               syncImageCornerToolbar()
               selectionTick()
+              persistAfterMutation(
+                fabricCanvasRef.current,
+                fabricCanvasRef.current?.getActiveObject() as any,
+              )
             }}
             onClose={() => setImageEffectsOpen(false)}
           />
