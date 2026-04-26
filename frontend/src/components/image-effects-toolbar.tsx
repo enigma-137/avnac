@@ -121,9 +121,17 @@ export default function ImageEffectsToolbar({
       } else if (filter.type === 'Contrast') {
         foundContrast = Math.round(filter.contrast * 100 + 100)
       } else if (filter.type === 'ColorMatrix' && filter.matrix) {
-        // Detect grayscale ratio from matrix[1] which is 0.7152 * ratio
-        const ratio = filter.matrix[1] / 0.7152
-        if (ratio > 0 && ratio <= 1.01) {
+        const m = filter.matrix
+        const ratio = m[1] / 0.7152
+        const looksLikeToolbarGrayscale =
+          ratio > 0 &&
+          ratio <= 1.01 &&
+          Math.abs(m[0] - (1 - 0.7874 * ratio)) < 1e-3 &&
+          Math.abs(m[2] - (0.0722 * ratio)) < 1e-3 &&
+          Math.abs(m[5] - (0.2126 * ratio)) < 1e-3 &&
+          Math.abs(m[6] - (1 - 0.2848 * ratio)) < 1e-3 &&
+          Math.abs(m[10] - (1 - 0.9278 * ratio)) < 1e-3
+        if (looksLikeToolbarGrayscale) {
           foundGrayscale = Math.round(ratio * 100)
         }
       }

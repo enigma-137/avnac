@@ -5,22 +5,40 @@ import { auth } from "../auth";
 
 const REMOVE_BG_LIMIT = 5; // 5 requests per minute per user
 const REMOVE_BG_WINDOW = 60 * 1000;
+/**
+ * In-memory usage map for rate limiting.
+ * NOTE: This is process-local and will reset on restart or bypass in multi-instance deployments.
+ * For production-scale horizontal scaling, use a shared store like Redis or a database table.
+ */
 const usageMap = new Map<string, { count: number; reset: number }>();
 
 function checkRateLimit(userId: string) {
   const now = Date.now();
+  
+  // Prune expired entries to prevent memory leak
   const usage = usageMap.get(userId);
+  if (usage && now > usage.reset) {
+    usageMap.delete(userId);
+  }
 
-  if (!usage || now > usage.reset) {
+  // Periodic bulk pruning for inactive users
+  if (usageMap.size > 1000) {
+    for (const [id, u] of usageMap.entries()) {
+      if (now > u.reset) usageMap.delete(id);
+    }
+  }
+
+  const currentUsage = usageMap.get(userId);
+  if (!currentUsage) {
     usageMap.set(userId, { count: 1, reset: now + REMOVE_BG_WINDOW });
     return true;
   }
 
-  if (usage.count >= REMOVE_BG_LIMIT) {
+  if (currentUsage.count >= REMOVE_BG_LIMIT) {
     return false;
   }
 
-  usage.count++;
+  currentUsage.count++;
   return true;
 }
 
